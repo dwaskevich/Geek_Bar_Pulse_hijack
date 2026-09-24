@@ -41,9 +41,6 @@
 /* Private user code ---------------------------------------------------------*/
 /* External variables --------------------------------------------------------*/
 
-/* Reference the external timer handle initialized in main.c */
-extern LPTIM_HandleTypeDef hlptim;
-
 /******************************************************************************/
 /*           Cortex-M0+ Processor Interruption and Exception Handlers          */ 
 /******************************************************************************/
@@ -93,13 +90,5 @@ void SysTick_Handler(void)
 /* please refer to the startup file.                                          */
 /******************************************************************************/
 
-/**
-  * @brief This function handles the Low-Power Timer 1 Interrupt.
-  */
-void LPTIM1_IRQHandler(void)
-{
-    /* Clear the timer's compare/match interrupt flag so it stops executing recursively */
-    HAL_LPTIM_IRQHandler(&hlptim);
-}
 
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

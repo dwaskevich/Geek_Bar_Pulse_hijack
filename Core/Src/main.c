@@ -40,15 +40,24 @@
 #define GREEN_PORT		GPIOA
 #define GREEN_PIN			GPIO_PIN_4
 
-#define ANIMATION_DELAY		(2000)
+#define SWITCH_PORT		GPIOA
+#define SWITCH_PIN		GPIO_PIN_7
+
+#define ANIMATION_DELAY		(150)
 
 
 /* Private variables ---------------------------------------------------------*/
+/* Handle for the Low-Power Timer */
+LPTIM_HandleTypeDef hlptim = {0};
+
+
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
+static void LPTIM_Init(void);
+void HAL_LPTIM_AutoReloadMatchCallback(LPTIM_HandleTypeDef *hlptim);
 
 /**
   * @brief  Main program.
@@ -62,19 +71,80 @@ int main(void)
   /* Configure the system clock */
   APP_SystemClockConfig();
 	
-	/* djjw - initialize hardware */
+	/* djjw - initialize pins */
 	GPIO_Init();
+	
+	/* 4. ================================================================= */
+	/*    CRITICAL J-LINK SAFETY WINDOW                                    */
+	/*    ================================================================= */
+	/* Flash the LED quickly for 5 seconds on initial boot. This leaves a      */
+	/* wide open window for your J-Link to halt or reprogram the core before  */
+	/* it plunges into low-power mode.                                      */
+	for(int i = 0; i < 5; i++)
+	{
+			HAL_GPIO_WritePin(RED_PORT, RED_PIN, GPIO_PIN_SET);
+			HAL_Delay(200);
+			HAL_GPIO_WritePin(RED_PORT, RED_PIN, GPIO_PIN_RESET);
+			HAL_Delay(800);
+	}
+	
+	/* djjw - using example for low power interrupt from Puya documentation package */
+	LPTIM_Init();
 
   while (1)
   {
-		/* toggle gpio - should be red led's */
-//		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-		HAL_GPIO_TogglePin(RED_PORT, RED_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GREEN_PORT, GREEN_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(BLUE_PORT, BLUE_PIN);
-		HAL_Delay(ANIMATION_DELAY);
+		/* Disable LPTIM */
+    __HAL_LPTIM_DISABLE(&hlptim);
+		
+		/* --- AWAKE PHASE --- */
+		/* Turn the LED on for 100ms to visually signal a successful wakeup */
+		HAL_GPIO_WritePin(GREEN_PORT, GREEN_PIN, GPIO_PIN_SET);
+		HAL_Delay(50);
+		HAL_GPIO_WritePin(GREEN_PORT, GREEN_PIN, GPIO_PIN_RESET);
+		HAL_Delay(500);
+
+		/* --- PREPARE FOR DEEP SLEEP --- */
+		/* Start LPTIM in interrupt mode. 
+			 Formula: Time (s) = Period / (LSI_Freq / Prescaler)
+			 Using an LSI of ~32,768 Hz and a Prescaler of 32 gives an effective 
+			 clock rate of 1024 Hz. 
+			 A period value of 4096 gives: 4096 / 1024 = exactly 4.0 seconds. */
+//		HAL_LPTIM_TimeOut_Start_IT(&hlptim, 4096);
+		/* Load autoreload value */
+		
+		/* Enable autoreload interrupt */
+		__HAL_LPTIM_ENABLE_IT(&hlptim, LPTIM_IT_ARRM);
+
+		/* Enable LPTIM */
+		__HAL_LPTIM_ENABLE(&hlptim);
+
+		/* Load autoreload value */
+		__HAL_LPTIM_AUTORELOAD_SET(&hlptim, 4096);
+
+		HAL_Delay(1);
+		
+		/* Start single count mode */
+		__HAL_LPTIM_START_SINGLE(&hlptim);		
+		    
+    /* Suspend Systick interrupt */
+    HAL_SuspendTick();
+
+		/* Enter STOP mode with interrupt wakeup */
+		HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+
+		/* ================================================================= */
+		/*   THE CPU IS NOW ASLEEP IN STOP MODE (CURRENT DRAW IS ~5-6 uA)    */
+		/* ================================================================= */
+		/* <-- CPU blocks here until the LPTIM interrupt wakes it up -->    */
+		
+		/* --- RECOVERY PHASE --- */
+		/* After waking up, the CPU automatically defaults back to its base 
+			 internal oscillator. Explicitly re-stop the timer handle to prepare 
+			 for the next loop. */
+		
+		/* Resume Systick interrupt */
+    HAL_ResumeTick();
+		
   }
 }
 
@@ -97,7 +167,8 @@ static void APP_SystemClockConfig(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz;  /* Configure HSI clock as 8MHz */
   RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                         /* Disable HSE */
   /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/
-  RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Disable LSI */
+//  RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Disable LSI */
+	RCC_OscInitStruct.LSIState = RCC_LSI_ON;                          /* Enable LSI */
   RCC_OscInitStruct.LSEState = RCC_LSE_OFF;                         /* Disable LSE */
   /*RCC_OscInitStruct.LSEDriver = RCC_LSEDRIVE_MEDIUM;*/
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_OFF;                     /* Disable PLL */
@@ -117,7 +188,7 @@ static void APP_SystemClockConfig(void)
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     APP_ErrorHandler();
-  }
+  }	
 }
 
 /**
@@ -152,7 +223,86 @@ static void GPIO_Init(void)
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	
-	HAL_GPIO_Init(GREEN_PORT, &GPIO_InitStruct);	
+	HAL_GPIO_Init(GREEN_PORT, &GPIO_InitStruct);
+	
+	GPIO_InitStruct.Pin = SWITCH_PIN;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	//GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(SWITCH_PORT, &GPIO_InitStruct);
+}
+
+/**
+  * @brief  djjw (gemini + Puya code example) Low Power Timer Configuration
+  * @param  None
+  * @retval None
+  */
+static void LPTIM_Init(void)
+{	
+	RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /* Route the internal LSI clock source directly to the LPTIM1 peripheral */
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_LPTIM;     /* Select peripheral clock: LPTIM */
+  PeriphClkInit.LptimClockSelection = RCC_LPTIMCLKSOURCE_LSI;   /* Select LPTIM clock source: LSI */
+  HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit);
+
+	/* Enable the LPTIM internal peripheral clock gate */
+	__HAL_RCC_LPTIM_CLK_ENABLE();
+
+	hlptim.Instance = LPTIM;	
+	hlptim.Init.Prescaler = LPTIM_PRESCALER_DIV32;	// 32768 Hz / 32 = 1024 Hz
+	hlptim.Init.UpdateMode = LPTIM_UPDATE_IMMEDIATE;	
+	
+	if (HAL_LPTIM_Init(&hlptim) != HAL_OK)
+	{
+			/* Initialization Error Handler */
+			while(1);
+	}
+
+	/* Clear pending interrupts and enable LPTIM1 in the Nested Vector Interrupt Controller */
+	HAL_NVIC_SetPriority(LPTIM1_IRQn, 0, 0);
+	HAL_NVIC_EnableIRQ(LPTIM1_IRQn);
+}
+
+///**
+//  * @brief   Enable LPTIM and interrupt, and start in single count mode
+//  * @param   None
+//  * @retval  None
+//  */
+//static void LPTIMStart(void)
+//{
+//  /* Enable autoreload interrupt */
+//  __HAL_LPTIM_ENABLE_IT(&hlptim, LPTIM_IT_ARRM);
+
+//  /* Enable LPTIM */
+//  __HAL_LPTIM_ENABLE(&hlptim);
+
+//  /* Load autoreload value */
+//  __HAL_LPTIM_AUTORELOAD_SET(&hlptim, 51);
+
+//  /* Delay 160us */
+//  APP_delay_us(160);
+//  
+//  /* Start single count mode */
+//  __HAL_LPTIM_START_SINGLE(&hlptim);
+//}
+
+/**
+  * @brief   LPTIM autoreload match interrupt callback function
+  * @param   None
+  * @retval  None
+  */
+void HAL_LPTIM_AutoReloadMatchCallback(LPTIM_HandleTypeDef *hlptim)
+{
+  (void) hlptim;
+//	HAL_GPIO_WritePin(BLUE_PORT, BLUE_PIN, GPIO_PIN_SET);
+//	//HAL_Delay(80);
+//	for(int i = 0; i < 50000; i++)
+//	{
+//		__NOP();
+//	}
+//	HAL_GPIO_WritePin(BLUE_PORT, BLUE_PIN, GPIO_PIN_RESET);
 }
 
 /**

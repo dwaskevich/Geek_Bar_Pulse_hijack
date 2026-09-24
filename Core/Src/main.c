@@ -32,11 +32,23 @@
 #include "main.h"
 
 /* Private define ------------------------------------------------------------*/
+/* djjw */
+#define RED_PORT			GPIOA
+#define RED_PIN				GPIO_PIN_5
+#define BLUE_PORT			GPIOA
+#define BLUE_PIN			GPIO_PIN_2
+#define GREEN_PORT		GPIOA
+#define GREEN_PIN			GPIO_PIN_4
+
+#define ANIMATION_DELAY		(2000)
+
+
 /* Private variables ---------------------------------------------------------*/
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
+static void GPIO_Init(void);
 
 /**
   * @brief  Main program.
@@ -49,10 +61,20 @@ int main(void)
   
   /* Configure the system clock */
   APP_SystemClockConfig();
+	
+	/* djjw - initialize hardware */
+	GPIO_Init();
 
   while (1)
   {
-
+		/* toggle gpio - should be red led's */
+//		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		HAL_GPIO_TogglePin(RED_PORT, RED_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GREEN_PORT, GREEN_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(BLUE_PORT, BLUE_PIN);
+		HAL_Delay(ANIMATION_DELAY);
   }
 }
 
@@ -96,6 +118,41 @@ static void APP_SystemClockConfig(void)
   {
     APP_ErrorHandler();
   }
+}
+
+/**
+  * @brief  djjw GPIO Configurations
+  * @param  None
+  * @retval None
+  */
+static void GPIO_Init(void)
+{	
+	/* enable GPIO port clock(s) */
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+	
+	/* declare an init structure */
+	GPIO_InitTypeDef GPIO_InitStruct = {0};	
+	
+	GPIO_InitStruct.Pin = RED_PIN;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(RED_PORT, &GPIO_InitStruct);
+	
+	GPIO_InitStruct.Pin = BLUE_PIN;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(BLUE_PORT, &GPIO_InitStruct);
+	
+	GPIO_InitStruct.Pin = GREEN_PIN;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GREEN_PORT, &GPIO_InitStruct);	
 }
 
 /**

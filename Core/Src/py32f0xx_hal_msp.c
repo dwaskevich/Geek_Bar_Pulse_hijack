@@ -48,4 +48,18 @@ void HAL_MspInit(void)
   __HAL_RCC_PWR_CLK_ENABLE();
 }
 
+/**
+  * @brief Initialize TIM-related MSP
+  */
+void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
+{
+	(void) htim;
+  /* Enable TIM1 clock */
+  __HAL_RCC_TIM1_CLK_ENABLE();
+  
+  /* Enable TIM interrupt */
+  HAL_NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
+}
+
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

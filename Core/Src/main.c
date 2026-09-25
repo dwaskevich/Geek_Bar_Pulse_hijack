@@ -47,12 +47,15 @@
 
 
 /* Private variables ---------------------------------------------------------*/
+/* Handle for the TIM1 Timer ... will be used for display muxing */
+TIM_HandleTypeDef		htim1 = {0};
 
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
+static void TIM1_Init(void);
 void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value);
 void Port_WriteUpperByte(GPIO_TypeDef *GPIOx, uint8_t value);
 
@@ -72,6 +75,15 @@ int main(void)
 	
 	/* djjw - initialize pins */
 	GPIO_Init();
+	
+	/* djjw - initialize TIM1 timer */
+	TIM1_Init();
+	
+	/* Start the TIM1 Base generation in interrupt mode */
+  if (HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
 	
 	/* turn on all LEDs */
 	Port_WriteLowerByte(GPIOB, 0xe8);
@@ -193,6 +205,39 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 	
+}
+
+/**
+  * @brief  djjw ... TIM1 Config
+  * @param  None
+  * @retval None
+  */
+static void TIM1_Init(void)
+{	
+	htim1.Instance               = TIM1;                             /* Select TIM1 */
+  htim1.Init.Period            = 10000 - 1;                          /* Auto-reload value */
+  htim1.Init.Prescaler         = 800 - 1;                         /* Prescaler of 1000-1 */
+  htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
+  htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
+  htim1.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;   /* Auto-reload register not buffered */
+	
+  /* Initialize TIM1 */
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @param  htim:TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	(void) htim;
+  HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
 }
 
 void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value)

@@ -52,7 +52,7 @@
 #define HAL_GPIO_MODULE_ENABLED    
 /* #define HAL_IWDG_MODULE_ENABLED */
 /* #define HAL_WWDG_MODULE_ENABLED */
-/* #define HAL_TIM_MODULE_ENABLED */
+#define HAL_TIM_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
 /* #define HAL_LPTIM_MODULE_ENABLED */
 #define HAL_PWR_MODULE_ENABLED
@@ -61,7 +61,7 @@
 /* #define HAL_SPI_MODULE_ENABLED */
 /* #define HAL_RTC_MODULE_ENABLED */
 /* #define HAL_LED_MODULE_ENABLED */
-#define HAL_EXTI_MODULE_ENABLED */
+#define HAL_EXTI_MODULE_ENABLED
 #define HAL_CORTEX_MODULE_ENABLED  
 
 /* ########################## Oscillator Values adaptation ####################*/

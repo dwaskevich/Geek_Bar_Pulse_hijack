@@ -40,6 +40,7 @@
 /* Private function prototypes -----------------------------------------------*/
 /* Private user code ---------------------------------------------------------*/
 /* External variables --------------------------------------------------------*/
+extern TIM_HandleTypeDef    htim1;
 
 /******************************************************************************/
 /*           Cortex-M0+ Processor Interruption and Exception Handlers          */ 
@@ -90,5 +91,12 @@ void SysTick_Handler(void)
 /* please refer to the startup file.                                          */
 /******************************************************************************/
 
+/**
+  * @brief This function handles TIM1 Interrupt .
+  */
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
+{
+  HAL_TIM_IRQHandler(&htim1);
+}
 
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

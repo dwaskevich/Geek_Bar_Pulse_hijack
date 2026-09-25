@@ -40,6 +40,9 @@
 #define SWITCH_PORT		GPIOA
 #define SWITCH_PIN		GPIO_PIN_7
 
+#define CHARGE_PORT		GPIOF
+#define CHARGE_PIN		GPIO_PIN_1
+
 #define ANIMATION_DELAY		(333)
 
 
@@ -50,31 +53,53 @@
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
+void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value);
+void Port_WriteUpperByte(GPIO_TypeDef *GPIOx, uint8_t value);
 
 /**
   * @brief  Main program.
   * @retval int
   */
 int main(void)
-{
+{	
   /* Reset of all peripherals, Initializes the Systick. */
   HAL_Init();
   
   /* Configure the system clock */
   APP_SystemClockConfig();
 	
+	HAL_Delay(1000);
+	
 	/* djjw - initialize pins */
 	GPIO_Init();
+	
+	/* turn on all LEDs */
+	Port_WriteLowerByte(GPIOB, 0xe8);
+	Port_WriteUpperByte(GPIOB, 0x01);
+	Port_WriteUpperByte(GPIOA, 0x98);
+	Port_WriteLowerByte(GPIOF, 0x04);
+	
+	HAL_Delay(1000);
+	
+	/* turn off all LEDs ... turn off anodes (bit value = 1), leave all cathodes on (bit value = 0) */
+	Port_WriteLowerByte(GPIOB, 0x00);
+	Port_WriteUpperByte(GPIOB, 0x00);
+	Port_WriteUpperByte(GPIOA, 0x00);
+	Port_WriteLowerByte(GPIOF, 0x00);
 
   while (1)
   {
-		/* toggle gpio - should be red led's */
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-		HAL_Delay(ANIMATION_DELAY);
+//		HAL_GPIO_WritePin(GPIOA, RED_PIN, HAL_GPIO_ReadPin(GPIOA, SWITCH_PIN));
+//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN));
+//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 1);
+//		HAL_Delay(50);
+//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
+		for(uint8_t i = 5; i < 8; i++)
+		{
+			Port_WriteLowerByte(GPIOB, 1 << i);
+			HAL_Delay(500);
+		}
+		Port_WriteLowerByte(GPIOB, 0x00);
 	}
 }
 
@@ -94,7 +119,7 @@ static void APP_SystemClockConfig(void)
 #if defined(RCC_HSIDIV_SUPPORT)
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                          /* HSI not divided */
 #endif
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz;  /* Configure HSI clock as 8MHz */
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_24MHz;  /* Configure HSI clock as 8MHz ... djjw changed to 24MHz */
   RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                         /* Disable HSE */
   /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/
   RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Disable LSI */
@@ -129,11 +154,13 @@ static void GPIO_Init(void)
 {	
 	/* enable GPIO port clock(s) */
 	__HAL_RCC_GPIOA_CLK_ENABLE();
+	__HAL_RCC_GPIOB_CLK_ENABLE();
+	__HAL_RCC_GPIOF_CLK_ENABLE();
 	
 	/* declare an init structure */
 	GPIO_InitTypeDef GPIO_InitStruct = {0};	
 	
-	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN;
+	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
@@ -145,7 +172,57 @@ static void GPIO_Init(void)
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	
 	HAL_GPIO_Init(SWITCH_PORT, &GPIO_InitStruct);
+	
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+	
+	GPIO_InitStruct.Pin = GPIO_PIN_1;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	
+	HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+	
+	GPIO_InitStruct.Pin = GPIO_PIN_2;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+	
 }
+
+void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value)
+{
+    uint32_t bsrr_value;
+
+    // High 16 bits of BSRR reset pins (1 clears pin)
+    // Low 16 bits of BSRR set pins (1 sets pin)
+    // (~value & 0xFF) finds zeros in the byte to turn them into resets
+    bsrr_value = ((uint32_t)(~value & 0xFF) << 16) | (value & 0xFF);
+    
+    GPIOx->BSRR = bsrr_value;
+}
+
+void Port_WriteUpperByte(GPIO_TypeDef *GPIOx, uint8_t value)
+{
+    uint32_t bsrr_value;
+
+    // Shift the 8-bit 'set' values to bits [15:8]
+    uint32_t set_mask = ((uint32_t)value) << 8;
+    
+    // Shift the inverted 8-bit 'reset' values to bits [31:24]
+    uint32_t rst_mask = ((uint32_t)(~value & 0xFF)) << 24;
+    
+    // Combine and execute in a single atomic cycle
+    bsrr_value = rst_mask | set_mask;
+    GPIOx->BSRR = bsrr_value;
+}
+
+
 
 /**
   * @brief  This function is executed in case of error occurrence.

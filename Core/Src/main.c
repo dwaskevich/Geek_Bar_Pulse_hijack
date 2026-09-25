@@ -126,11 +126,14 @@
 #define CHARGE_PORT		GPIOF
 #define CHARGE_PIN		GPIO_PIN_1
 
-#define ANIMATION_DELAY		(250)
+//#define ANIMATION_DELAY		(250)
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM1 Timer ... will be used for display muxing */
 TIM_HandleTypeDef		htim1 = {0};
+
+/* LED display 7-anode array (note - anodes span GPIO Port A and B) */
+volatile uint32_t LED_anode_map[7][2] = {0};
 
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -164,15 +167,13 @@ int main(void)
   {
     APP_ErrorHandler();
   }
+		
+	/* testing anode array */
+	LED_anode_map[0][0] = 0x00009800;
+	LED_anode_map[0][1] = 0;
 	
-	/* turn on all LEDs for testing (turn on anodes ... set bit value = 1) */
-	GPIOB->BSRR = 0x000001e8;
-	GPIOA->BSRR = 0x00009800;
-	
-	/* individual led anodes for testing */
-//	GPIOB->BSRR = 0x00000008;
-//	GPIOA->BSRR = 0x00000800;
-	
+	LED_anode_map[4][0] = 0x00009000;
+	LED_anode_map[4][1] = 0x000001e8;
 
   while (1)
   {		
@@ -185,6 +186,9 @@ int main(void)
   * @brief  System Clock Configuration
   * @param  None
   * @retval None
+	*
+	*	djjw ... mostly defaults, changed HSI calibration to 24MHz (sets HSI to 24MHz)
+	*
   */
 static void APP_SystemClockConfig(void)
 {
@@ -197,7 +201,7 @@ static void APP_SystemClockConfig(void)
 #if defined(RCC_HSIDIV_SUPPORT)
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                          /* HSI not divided */
 #endif
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_24MHz;  /* Configure HSI clock as 8MHz ... djjw changed to 24MHz */
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_24MHz; /* Configure HSI clock as 8MHz ... djjw changed to 24MHz */
   RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                         /* Disable HSE */
   /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/
   RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Disable LSI */
@@ -224,9 +228,12 @@ static void APP_SystemClockConfig(void)
 }
 
 /**
-  * @brief  djjw ... GPIO Config
+  * @brief  GPIO Config
   * @param  None
   * @retval None
+	*
+	*	djjw ... mapping Geek Bar Pulse PCB layout (https://github.com/schlae/VapeRE/tree/main/BD0027)
+	*
   */
 static void GPIO_Init(void)
 {	
@@ -273,11 +280,11 @@ static void GPIO_Init(void)
 }
 
 /**
-  * @brief  djjw ... TIM1 Config
+  * @brief  TIM1 Config
   * @param  None
   * @retval None
 	*
-	*	LED display mux timer ... 600 Hz refresh for all LEDs ... 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz
+	*	djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz
 	*
   */
 static void TIM1_Init(void)
@@ -298,11 +305,11 @@ static void TIM1_Init(void)
 }
 
 /**
-  * @brief  djjw ... Period elapsed callback in non blocking mode
+  * @brief  Period elapsed callback in non blocking mode
   * @param  htim:TIM handle
   * @retval None
 	*
-	*	LED display mux ISR ... 600Hz refresh rate
+	*	djjw ... LED display mux ISR (600Hz refresh rate)
 	*
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -312,7 +319,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	/* port masks use BSRR lower 16-bits (set mask) to drive cathodes inactive (high) */
 	#define PORTA_CATHODE_MASK	0x00000700
 	#define PORTB_CATHODE_MASK	0x00000017
-	#define PORTF_CATHODE_MASK	0x00000004	
+	
+	/* port masks use BSRR upper 16-bits (reset mask) to drive anodes inactive (low) */
+	#define PORTA_ANODE_MASK	0x98000000
+	#define PORTB_ANODE_MASK	0x01e80000
 	
 	(void) htim; /* suppress compiler warning */
 	static uint8_t cathode_counter = 0;
@@ -320,7 +330,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	/* turn off all cathodes to prevent ghosting while updating next anode group */
 	GPIOA->BSRR = PORTA_CATHODE_MASK;
 	GPIOB->BSRR = PORTB_CATHODE_MASK;
-	GPIOF->BSRR = PORTF_CATHODE_MASK;
+	
+	/* clear previous anode values from GPIO ports */
+	GPIOA->BSRR = PORTA_ANODE_MASK;
+	GPIOB->BSRR = PORTB_ANODE_MASK;
+	
+	/* load GPIO Port A and B with anode values for next cathode in scan */
+	GPIOA->BSRR = LED_anode_map[cathode_counter][0];
+	GPIOB->BSRR = LED_anode_map[cathode_counter][1];
 	
 	switch(cathode_counter) /* drive individual common cathodes via BSRR reset (upper 16-bits) to drive cathode active (low) */
 	{
@@ -357,7 +374,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	}
 	
 	cathode_counter++;
-	if(cathode_counter > NUM_LED_CATHODES)
+	if(cathode_counter >= NUM_LED_CATHODES)
 		cathode_counter = 0;
 }
 

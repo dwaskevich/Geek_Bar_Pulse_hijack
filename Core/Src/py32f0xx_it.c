@@ -93,6 +93,9 @@ void SysTick_Handler(void)
 
 /**
   * @brief This function handles TIM1 Interrupt .
+	*
+	*	djjw ... copied from PY32F0xx Firmware Master SDK download (Timer code example)
+	*
   */
 void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 {

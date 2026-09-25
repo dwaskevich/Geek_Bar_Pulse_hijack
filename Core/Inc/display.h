@@ -10,6 +10,14 @@
 #ifndef __DISPLAY_H
 #define __DISPLAY_H
 
+/* enum for passing top/bottom display parameters */
+enum 
+{
+	TOP = 0,
+	BOTTOM
+};
+
+
 void display_cathodes_off(void);
 
 

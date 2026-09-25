@@ -50,6 +50,9 @@ void HAL_MspInit(void)
 
 /**
   * @brief Initialize TIM-related MSP
+	*
+	*	djjw ... copied from PY32F0xx Firmware Master SDK download (Timer code example)
+	*
   */
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
 {

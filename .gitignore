@@ -35,6 +35,9 @@
 *.pbi
 *.pbd
 
+# Keil uVision Debugger Component Viewer stubs
+*.scvd
+
 # Browsing Information folders
 *.crf
 *.browse

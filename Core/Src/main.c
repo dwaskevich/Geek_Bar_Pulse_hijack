@@ -128,7 +128,6 @@
 
 #define ANIMATION_DELAY		(250)
 
-
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM1 Timer ... will be used for display muxing */
 TIM_HandleTypeDef		htim1 = {0};
@@ -139,8 +138,6 @@ TIM_HandleTypeDef		htim1 = {0};
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM1_Init(void);
-void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value);
-void Port_WriteUpperByte(GPIO_TypeDef *GPIOx, uint8_t value);
 
 /**
   * @brief  Main program.
@@ -168,33 +165,13 @@ int main(void)
     APP_ErrorHandler();
   }
 	
-	/* turn on all LEDs */
-	Port_WriteLowerByte(GPIOB, 0xe8);
-	Port_WriteUpperByte(GPIOB, 0x01);
-	Port_WriteUpperByte(GPIOA, 0x98);
-	Port_WriteLowerByte(GPIOF, 0x04);
-	
-	HAL_Delay(1000);
-	
-	/* turn off all LEDs ... turn off anodes (bit value = 1), leave all cathodes on (bit value = 0) */
-	Port_WriteLowerByte(GPIOB, 0x00);
-	Port_WriteUpperByte(GPIOB, 0x00);
-	Port_WriteUpperByte(GPIOA, 0x00);
-	Port_WriteLowerByte(GPIOF, 0x00);
+	/* turn on all LEDs for testing (turn on anodes ... set bit value = 1) */
+	GPIOB->BSRR = 0x000001e8;
+	GPIOA->BSRR = 0x00009800;	
 
   while (1)
-  {
-//		HAL_GPIO_WritePin(GPIOA, RED_PIN, HAL_GPIO_ReadPin(GPIOA, SWITCH_PIN));
-//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN));
-//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 1);
-//		HAL_Delay(50);
-//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
-		for(uint8_t i = 5; i < 8; i++)
-		{
-			Port_WriteLowerByte(GPIOB, 1 << i);
-			HAL_Delay(200);
-		}
-		Port_WriteLowerByte(GPIOB, 0x00);
+  {		
+		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);		
 	}
 }
 
@@ -293,12 +270,15 @@ static void GPIO_Init(void)
   * @brief  djjw ... TIM1 Config
   * @param  None
   * @retval None
+	*
+	*	LED display mux timer ... 600 Hz refresh for all LEDs ... 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz
+	*
   */
 static void TIM1_Init(void)
 {	
 	htim1.Instance               = TIM1;                             /* Select TIM1 */
-  htim1.Init.Period            = 1000 - 1;                          /* Auto-reload value */
-  htim1.Init.Prescaler         = 40 - 1;                         /* Prescaler of 1000-1 */
+  htim1.Init.Period            = 1000 - 1;                         /* Auto-reload value */
+  htim1.Init.Prescaler         = 40 - 1;                           /* Prescaler of 40 - 1 */
   htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
   htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
   htim1.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
@@ -312,88 +292,68 @@ static void TIM1_Init(void)
 }
 
 /**
-  * @brief  Period elapsed callback in non blocking mode
+  * @brief  djjw ... Period elapsed callback in non blocking mode
   * @param  htim:TIM handle
   * @retval None
+	*
+	*	LED display mux ISR ... 600Hz refresh rate
+	*
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	(void) htim;
-	static uint8_t counter = 0;
+	#define NUM_LED_CATHODES	(7)
 	
-	display_cathodes_off();
+	/* port masks use BSRR lower 16-bits (set mask) to drive cathodes inactive (high) */
+	#define PORTA_CATHODE_MASK	0x00000700
+	#define PORTB_CATHODE_MASK	0x00000017
+	#define PORTF_CATHODE_MASK	0x00000004	
 	
-	switch(counter % 8)
+	(void) htim; /* suppress compiler warning */
+	static uint8_t cathode_counter = 0;
+	
+	/* turn off all cathodes to prevent ghosting while updating next anode group */
+	GPIOA->BSRR = PORTA_CATHODE_MASK;
+	GPIOB->BSRR = PORTB_CATHODE_MASK;
+	GPIOF->BSRR = PORTF_CATHODE_MASK;
+	
+	switch(cathode_counter) /* drive individual common cathodes via BSRR reset (upper 16-bits) to drive cathode active (low) */
 	{
-		case 0:
+		case 0: /* TOP_LEDS (PA10) ... top arc, lightning bolt, line */
 			GPIOA->BSRR = 0x04000000;
 			break;
 		
-		case 1:
+		case 1: /* BOT_LEDS (PA9) ... bottom arc, tear drop, line */
 			GPIOA->BSRR = 0x02000000;
 			break;
 		
-		case 2:
+		case 2: /* LED_BOTRIGHT (PA8) ... bottom 7-segment digit 0, bottom segment of digit 2 ("1") */
 			GPIOA->BSRR = 0x01000000;
 			break;
 		
-		case 3:
+		case 3: /* MID_LEDS (PB4) ... center cycle (4 segments), rocket ship */
 			GPIOB->BSRR = 0x00100000;
 			break;
 		
-		case 4:
+		case 4: /* LED_BOTLEFT (PB2) ... bottom 7-segment digit 1, top segment of digit 2 ("1") */
 			GPIOB->BSRR = 0x00040000;
 			break;
 		
-		case 5:
+		case 5: /* LED_TOPRIGHT (PB1) ... top 7-segment digit 0, bottom segment of digit 2 ("1") */
 			GPIOB->BSRR = 0x00020000;
 			break;
 		
-		case 6:
+		case 6: /* LED_TOPLEFT (PB0) ... top 7-segment digit 1, top segment of digit 2 ("1") */
 			GPIOB->BSRR = 0x00010000;
-			break;
-		
-		case 7:
-			GPIOF->BSRR = 0x00040000;
 			break;
 		
 		default:
 			break;		
 	}
 	
-	counter++;
-	
-//  HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);	
+	cathode_counter++;
+	if(cathode_counter > NUM_LED_CATHODES)
+		cathode_counter = 0;
 }
-
-void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value)
-{
-    uint32_t bsrr_value;
-
-    // High 16 bits of BSRR reset pins (1 clears pin)
-    // Low 16 bits of BSRR set pins (1 sets pin)
-    // (~value & 0xFF) finds zeros in the byte to turn them into resets
-    bsrr_value = ((uint32_t)(~value & 0xFF) << 16) | (value & 0xFF);
-    
-    GPIOx->BSRR = bsrr_value;
-}
-
-void Port_WriteUpperByte(GPIO_TypeDef *GPIOx, uint8_t value)
-{
-    uint32_t bsrr_value;
-
-    // Shift the 8-bit 'set' values to bits [15:8]
-    uint32_t set_mask = ((uint32_t)value) << 8;
-    
-    // Shift the inverted 8-bit 'reset' values to bits [31:24]
-    uint32_t rst_mask = ((uint32_t)(~value & 0xFF)) << 24;
-    
-    // Combine and execute in a single atomic cycle
-    bsrr_value = rst_mask | set_mask;
-    GPIOx->BSRR = bsrr_value;
-}
-
-
 
 /**
   * @brief  This function is executed in case of error occurrence.

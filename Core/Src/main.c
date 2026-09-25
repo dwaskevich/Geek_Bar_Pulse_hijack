@@ -151,7 +151,7 @@ int main(void)
   /* Configure the system clock */
   APP_SystemClockConfig();
 	
-	HAL_Delay(1000);
+	HAL_Delay(1000); /* safety time delay in case SWD port bricked by firmware ... remove later */
 	
 	/* djjw - initialize pins */
 	GPIO_Init();
@@ -167,10 +167,16 @@ int main(void)
 	
 	/* turn on all LEDs for testing (turn on anodes ... set bit value = 1) */
 	GPIOB->BSRR = 0x000001e8;
-	GPIOA->BSRR = 0x00009800;	
+	GPIOA->BSRR = 0x00009800;
+	
+	/* individual led anodes for testing */
+//	GPIOB->BSRR = 0x00000008;
+//	GPIOA->BSRR = 0x00000800;
+	
 
   while (1)
   {		
+		/* read charging indicator ... BLUE LEDs if charging is active */
 		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);		
 	}
 }
@@ -318,11 +324,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	
 	switch(cathode_counter) /* drive individual common cathodes via BSRR reset (upper 16-bits) to drive cathode active (low) */
 	{
-		case 0: /* TOP_LEDS (PA10) ... top arc, lightning bolt, line */
+		case 0: /* TOP_LEDS (PA10) ... top arc, lightning bolt, top line */
 			GPIOA->BSRR = 0x04000000;
 			break;
 		
-		case 1: /* BOT_LEDS (PA9) ... bottom arc, tear drop, line */
+		case 1: /* BOT_LEDS (PA9) ... bottom arc, tear drop, bottom line */
 			GPIOA->BSRR = 0x02000000;
 			break;
 		

@@ -382,7 +382,7 @@
       </TargetOption>
       <Groups>
         <Group>
-          <GroupName>Source Group 1</GroupName>
+          <GroupName>Src</GroupName>
           <Files>
             <File>
               <FileName>main.c</FileName>
@@ -400,19 +400,9 @@
               <FilePath>.\Core\Src\py32f0xx_it.c</FilePath>
             </File>
             <File>
-              <FileName>main.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Core\Inc\main.h</FilePath>
-            </File>
-            <File>
-              <FileName>py32f0xx_hal_conf.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Core\Inc\py32f0xx_hal_conf.h</FilePath>
-            </File>
-            <File>
-              <FileName>py32f0xx_it.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Core\Inc\py32f0xx_it.h</FilePath>
+              <FileName>display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\Src\display.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -543,6 +533,31 @@
               <FileName>py32f0xx_hal_wwdg.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\PY32F0xx_HAL_Driver\py32f0xx_hal_wwdg.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Inc</GroupName>
+          <Files>
+            <File>
+              <FileName>main.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\main.h</FilePath>
+            </File>
+            <File>
+              <FileName>py32f0xx_hal_conf.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\py32f0xx_hal_conf.h</FilePath>
+            </File>
+            <File>
+              <FileName>py32f0xx_it.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\py32f0xx_it.h</FilePath>
+            </File>
+            <File>
+              <FileName>display.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\display.h</FilePath>
             </File>
           </Files>
         </Group>

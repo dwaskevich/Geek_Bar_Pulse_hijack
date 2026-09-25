@@ -6,6 +6,88 @@
   ******************************************************************************
   * @attention
   *
+  * Date:    24-Sept-2026
+  * Author:  David Waskevich
+  *
+  * Description: Geek Bar Pulse hijack
+	*
+  * Geek Bar Pulse reverse engineered documentation:
+  *    https://github.com/schlae/VapeRE/tree/main/BD0027
+  *              
+  *
+  * Hardware:    Puya PY32f030EK28 Cortex-M0
+  *              -> 64k Flash, 8k SRAM, 32-QFN 5x5 package
+	*							 https://www.py32.org/en/mcu/PY32F030xx.html
+  *
+  * IDE:         Keil MDK-ARM v5.43a uVision 5
+  *
+  * Wiring:      SWD interface exposed on USB-C charging port (CC1/CC2)
+	*							 
+  *              -> Normal state of unit is in deep sleep (or stop), SWD is
+  *                 unavailable. Slide switch wakes unit
+  *              /WR   - PB10 (BluePill P3 header, pin 15)
+  *              /RD   - PB11 ... not used (BluePill P3 header, pin 16)
+  *              /TEST - PC15 (BluePill P3 header, pin 4)
+  *
+  * Peripheral setup:
+  *              UART - USART1 ... Tx = PA9, Rx = PA10
+  *              Escape sequence timeout timer - TIM1 (oneshot mode, 20 ms interrupt)
+  *              Readback timer - TIM2 (oneshot mode, 20/50 ms interrupt)
+  *              Switch matrix timer - TIM3 (555 us interrupt)
+  *              Hardware-based delay - TIM4 (.5 us count)
+  *              I2C1 - future use (CapSense buttons)
+  *              Program/Debug - SWD ... PA13 (SWDIO)/PA14 (SWDCK)
+  *
+  * Serial terminal (TeraTerm, etc) navigation:
+  *              Up/Down arrow keys - scroll back/forward to previous/next line
+  *              Right/Left arrow keys - replay line, fast/normal playback speed
+  *              PageUp/PageDown keys - scroll back/forward PAGE_JUMP_SIZE lines
+  *              Home key - return to the most recent line
+  *              End key - go directly to the oldest line/record
+  *              Delete key - enter pause/single-step mode (subsequent presses single-steps readback)
+  *              Insert key - dual-purpose for now ... print the deepest FIFO level so far
+  *              	and resume readback (i.e. restart readback/TIM2 timer)
+  *              Escape key - abandon (escape) a readback by quickly recalling the line
+  *
+  * 4x4 matrix button navigation:
+  *             		Col0	Col1	Col2	Col3
+  *             Row0	PageUp	Home	N/A		SingleStep
+  *             Row1	PageDn	End		N/A		Resume
+  *             Row2	N/A		N/A		N/A		ScrollUp
+  *             Row3	ReadBkF	Escape	ReadBk	ScrollDn
+  *
+  * Usage:       #include <iee_flip_03600_20_040.h>
+  *              NOTE - arbitrarily chose BELL (ctrl-G) character to reset display.  *
+  *
+  * Update 18-Aug-2024:
+  *		- imported source/header files from PSoC version
+  *
+  * Update 19-Aug-2024:
+  *		- completed low-level hardware drivers for STM32
+  *
+  * Update 20-Aug-2024:
+  *		- replaced HAL_Delay with cycle count
+  *
+  * Update 22-Aug-2024:
+  *		- added 4x4 switch matrix
+  *		- imported debounce library from https://github.com/tcleg/Button_Debouncer/tree/master
+  *			-> note ... debounce library is an implementation of Jack Ganssle (https://www.ganssle.com/debouncing-pt2.htm)
+  *		- replaced cycle count delay with TIM4 delay function
+  *
+  * Update 23-Aug-2024:
+  *		- modified behavior of single-step readback
+  *			-> if held, single-step reads back characters at half the readback speed
+  *			-> when released, readback timer is stopped and reloaded with previous readback speed value
+  *			-> press_and_release behaves the same (reads back one character for each button press)
+  *
+  * Update 24-Aug-2024:
+  *		- fine tuned TIM4 delay function
+  *			-> TIM4 is on 72MHz bus
+  *			-> prescaler set to 18 (well, 18 - 1) ... 4MHz counter frequency
+  *			-> modified delay_us() function to account for 4MHz clock
+  *		- deactivated all column drivers in default switch condition
+  *
+	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
   *
@@ -30,6 +112,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "display.h"
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
@@ -37,13 +120,13 @@
 #define BLUE_PIN			GPIO_PIN_2
 #define GREEN_PIN			GPIO_PIN_4
 
-#define SWITCH_PORT		GPIOA
-#define SWITCH_PIN		GPIO_PIN_7
+#define SLIDE_SWITCH_PORT		GPIOA
+#define SLIDE_SWITCH_PIN		GPIO_PIN_7
 
 #define CHARGE_PORT		GPIOF
 #define CHARGE_PIN		GPIO_PIN_1
 
-#define ANIMATION_DELAY		(333)
+#define ANIMATION_DELAY		(250)
 
 
 /* Private variables ---------------------------------------------------------*/
@@ -109,7 +192,7 @@ int main(void)
 		for(uint8_t i = 5; i < 8; i++)
 		{
 			Port_WriteLowerByte(GPIOB, 1 << i);
-			HAL_Delay(500);
+			HAL_Delay(200);
 		}
 		Port_WriteLowerByte(GPIOB, 0x00);
 	}
@@ -179,11 +262,11 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 	
-	GPIO_InitStruct.Pin = SWITCH_PIN;
+	GPIO_InitStruct.Pin = SLIDE_SWITCH_PIN;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	
-	HAL_GPIO_Init(SWITCH_PORT, &GPIO_InitStruct);
+	HAL_GPIO_Init(SLIDE_SWITCH_PORT, &GPIO_InitStruct);
 	
 	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -204,7 +287,6 @@ static void GPIO_Init(void)
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	
 	HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
-	
 }
 
 /**
@@ -215,8 +297,8 @@ static void GPIO_Init(void)
 static void TIM1_Init(void)
 {	
 	htim1.Instance               = TIM1;                             /* Select TIM1 */
-  htim1.Init.Period            = 10000 - 1;                          /* Auto-reload value */
-  htim1.Init.Prescaler         = 800 - 1;                         /* Prescaler of 1000-1 */
+  htim1.Init.Period            = 1000 - 1;                          /* Auto-reload value */
+  htim1.Init.Prescaler         = 40 - 1;                         /* Prescaler of 1000-1 */
   htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
   htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
   htim1.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
@@ -237,7 +319,51 @@ static void TIM1_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	(void) htim;
-  HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+	static uint8_t counter = 0;
+	
+	display_cathodes_off();
+	
+	switch(counter % 8)
+	{
+		case 0:
+			GPIOA->BSRR = 0x04000000;
+			break;
+		
+		case 1:
+			GPIOA->BSRR = 0x02000000;
+			break;
+		
+		case 2:
+			GPIOA->BSRR = 0x01000000;
+			break;
+		
+		case 3:
+			GPIOB->BSRR = 0x00100000;
+			break;
+		
+		case 4:
+			GPIOB->BSRR = 0x00040000;
+			break;
+		
+		case 5:
+			GPIOB->BSRR = 0x00020000;
+			break;
+		
+		case 6:
+			GPIOB->BSRR = 0x00010000;
+			break;
+		
+		case 7:
+			GPIOF->BSRR = 0x00040000;
+			break;
+		
+		default:
+			break;		
+	}
+	
+	counter++;
+	
+//  HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);	
 }
 
 void Port_WriteLowerByte(GPIO_TypeDef *GPIOx, uint8_t value)

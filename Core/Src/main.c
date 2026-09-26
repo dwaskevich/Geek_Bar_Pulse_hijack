@@ -113,6 +113,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "display.h"
+#include "leds.h"
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
@@ -126,6 +127,8 @@
 #define CHARGE_PORT		GPIOF
 #define CHARGE_PIN		GPIO_PIN_1
 
+#define NUM_LED_CATHODES	(7)
+
 //#define ANIMATION_DELAY		(250)
 
 /* Private variables ---------------------------------------------------------*/
@@ -133,7 +136,7 @@
 TIM_HandleTypeDef		htim1 = {0};
 
 /* LED display 7-anode array (note - anodes span GPIO Port A and B) */
-volatile uint32_t LED_anode_map[7][2] = {0};
+volatile uint32_t LED_display_buffer[7][2] = {0};
 
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -167,18 +170,21 @@ int main(void)
   {
     APP_ErrorHandler();
   }
-		
-	/* testing anode array */
-	LED_anode_map[0][0] = 0x00009800;
-	LED_anode_map[0][1] = 0;
-	
-	LED_anode_map[4][0] = 0x00009000;
-	LED_anode_map[4][1] = 0x000001e8;
 
   while (1)
   {		
-		/* read charging indicator ... BLUE LEDs if charging is active */
-		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);		
+		/* read charging indicator ... illuninate BLUE LEDs if charging is active */
+		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
+		
+		/* testing led array */
+		for(uint8_t i = 0; i < max_leds; i++)
+		{
+			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].segment_GPIOA;
+			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].segment_GPIOB;
+			HAL_Delay(100);
+			LED_display_buffer[LED_port_position[i].scan_line][0] = 0x98000000;
+			LED_display_buffer[LED_port_position[i].scan_line][1] = 0x01e80000;
+		}
 	}
 }
 
@@ -313,9 +319,7 @@ static void TIM1_Init(void)
 	*
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-	#define NUM_LED_CATHODES	(7)
-	
+{	
 	/* port masks use BSRR lower 16-bits (set mask) to drive cathodes inactive (high) */
 	#define PORTA_CATHODE_MASK	0x00000700
 	#define PORTB_CATHODE_MASK	0x00000017
@@ -327,6 +331,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	(void) htim; /* suppress compiler warning */
 	static uint8_t cathode_counter = 0;
 	
+	/* Constant mapping of cathode activation masks (Upper 16-bits of BSRR for Reset) */
+	/* Structure: { GPIOA_ResetMask, GPIOB_ResetMask } */
+	static const uint32_t CATHODE_BITMASKS[NUM_LED_CATHODES][2] = {
+			{ 0x04000000, 0x00000000 }, // Case 0: TOP_LEDS (PA10)
+			{ 0x02000000, 0x00000000 }, // Case 1: BOT_LEDS (PA9)
+			{ 0x01000000, 0x00000000 }, // Case 2: LED_BOTRIGHT (PA8)
+			{ 0x00000000, 0x00100000 }, // Case 3: MID_LEDS (PB4)
+			{ 0x00000000, 0x00040000 }, // Case 4: LED_BOTLEFT (PB2)
+			{ 0x00000000, 0x00020000 }, // Case 5: LED_TOPRIGHT (PB1)
+			{ 0x00000000, 0x00010000 }  // Case 6: LED_TOPLEFT (PB0)
+	};
+	
 	/* turn off all cathodes to prevent ghosting while updating next anode group */
 	GPIOA->BSRR = PORTA_CATHODE_MASK;
 	GPIOB->BSRR = PORTB_CATHODE_MASK;
@@ -336,42 +352,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	GPIOB->BSRR = PORTB_ANODE_MASK;
 	
 	/* load GPIO Port A and B with anode values for next cathode in scan */
-	GPIOA->BSRR = LED_anode_map[cathode_counter][0];
-	GPIOB->BSRR = LED_anode_map[cathode_counter][1];
+	GPIOA->BSRR = LED_display_buffer[cathode_counter][0];
+	GPIOB->BSRR = LED_display_buffer[cathode_counter][1];
 	
-	switch(cathode_counter) /* drive individual common cathodes via BSRR reset (upper 16-bits) to drive cathode active (low) */
-	{
-		case 0: /* TOP_LEDS (PA10) ... top arc, lightning bolt, top line */
-			GPIOA->BSRR = 0x04000000;
-			break;
-		
-		case 1: /* BOT_LEDS (PA9) ... bottom arc, tear drop, bottom line */
-			GPIOA->BSRR = 0x02000000;
-			break;
-		
-		case 2: /* LED_BOTRIGHT (PA8) ... bottom 7-segment digit 0, bottom segment of digit 2 ("1") */
-			GPIOA->BSRR = 0x01000000;
-			break;
-		
-		case 3: /* MID_LEDS (PB4) ... center cycle (4 segments), rocket ship */
-			GPIOB->BSRR = 0x00100000;
-			break;
-		
-		case 4: /* LED_BOTLEFT (PB2) ... bottom 7-segment digit 1, top segment of digit 2 ("1") */
-			GPIOB->BSRR = 0x00040000;
-			break;
-		
-		case 5: /* LED_TOPRIGHT (PB1) ... top 7-segment digit 0, bottom segment of digit 2 ("1") */
-			GPIOB->BSRR = 0x00020000;
-			break;
-		
-		case 6: /* LED_TOPLEFT (PB0) ... top 7-segment digit 1, top segment of digit 2 ("1") */
-			GPIOB->BSRR = 0x00010000;
-			break;
-		
-		default:
-			break;		
-	}
+	/* activate current scan cathode */
+	GPIOA->BSRR = CATHODE_BITMASKS[cathode_counter][0];
+	GPIOB->BSRR = CATHODE_BITMASKS[cathode_counter][1];
 	
 	cathode_counter++;
 	if(cathode_counter >= NUM_LED_CATHODES)

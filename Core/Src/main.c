@@ -22,70 +22,33 @@
   * IDE:         Keil MDK-ARM v5.43a uVision 5
   *
   * Wiring:      SWD interface exposed on USB-C charging port (CC1/CC2)
-	*							 
-  *              -> Normal state of unit is in deep sleep (or stop), SWD is
-  *                 unavailable. Slide switch wakes unit
-  *              /WR   - PB10 (BluePill P3 header, pin 15)
-  *              /RD   - PB11 ... not used (BluePill P3 header, pin 16)
-  *              /TEST - PC15 (BluePill P3 header, pin 4)
+	*							 SWDIO - PA13, SWCLK - PA14
+  *              NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface
+  *                 is normally unavailable. Slide switch wakes unit and provides
+	*									small connect window. Can also plug in charger to wake uinit.
+  *              See schematic for feature element mapping (i.e. RGB LEDs, display, etc)
+	*									-> https://github.com/schlae/VapeRE/tree/main/BD0027
+  *              Charge indicator - PF1
+  *              Slide switch - PA7 (pulls low in one position, high in remaining two)
   *
   * Peripheral setup:
-  *              UART - USART1 ... Tx = PA9, Rx = PA10
-  *              Escape sequence timeout timer - TIM1 (oneshot mode, 20 ms interrupt)
-  *              Readback timer - TIM2 (oneshot mode, 20/50 ms interrupt)
-  *              Switch matrix timer - TIM3 (555 us interrupt)
+  *              UART - USART1 ... re-purpose SWD via AF registers:
+	*									-> Rx = PA13 (AF8), Tx = PA14 (AF1)
+  *              LED matrix timer - TIM1 (auto-reload mode, 1.6 ms interrupt)
+  *              Application time-out timer - TIM2 (oneshot mode, 10s interrupt)
+  *              Low power timer - LPTIM (? interrupt)
   *              Hardware-based delay - TIM4 (.5 us count)
   *              I2C1 - future use (CapSense buttons)
   *              Program/Debug - SWD ... PA13 (SWDIO)/PA14 (SWDCK)
   *
-  * Serial terminal (TeraTerm, etc) navigation:
-  *              Up/Down arrow keys - scroll back/forward to previous/next line
-  *              Right/Left arrow keys - replay line, fast/normal playback speed
-  *              PageUp/PageDown keys - scroll back/forward PAGE_JUMP_SIZE lines
-  *              Home key - return to the most recent line
-  *              End key - go directly to the oldest line/record
-  *              Delete key - enter pause/single-step mode (subsequent presses single-steps readback)
-  *              Insert key - dual-purpose for now ... print the deepest FIFO level so far
-  *              	and resume readback (i.e. restart readback/TIM2 timer)
-  *              Escape key - abandon (escape) a readback by quickly recalling the line
   *
-  * 4x4 matrix button navigation:
-  *             		Col0	Col1	Col2	Col3
-  *             Row0	PageUp	Home	N/A		SingleStep
-  *             Row1	PageDn	End		N/A		Resume
-  *             Row2	N/A		N/A		N/A		ScrollUp
-  *             Row3	ReadBkF	Escape	ReadBk	ScrollDn
+  * Usage:       #include display.h, leds.h
+  *              NOTE - 
   *
-  * Usage:       #include <iee_flip_03600_20_040.h>
-  *              NOTE - arbitrarily chose BELL (ctrl-G) character to reset display.  *
+  * Update 26-Sept-2026:
+  *		- added LED mapping (leds.h)
+	*		- verified mapping with test animation
   *
-  * Update 18-Aug-2024:
-  *		- imported source/header files from PSoC version
-  *
-  * Update 19-Aug-2024:
-  *		- completed low-level hardware drivers for STM32
-  *
-  * Update 20-Aug-2024:
-  *		- replaced HAL_Delay with cycle count
-  *
-  * Update 22-Aug-2024:
-  *		- added 4x4 switch matrix
-  *		- imported debounce library from https://github.com/tcleg/Button_Debouncer/tree/master
-  *			-> note ... debounce library is an implementation of Jack Ganssle (https://www.ganssle.com/debouncing-pt2.htm)
-  *		- replaced cycle count delay with TIM4 delay function
-  *
-  * Update 23-Aug-2024:
-  *		- modified behavior of single-step readback
-  *			-> if held, single-step reads back characters at half the readback speed
-  *			-> when released, readback timer is stopped and reloaded with previous readback speed value
-  *			-> press_and_release behaves the same (reads back one character for each button press)
-  *
-  * Update 24-Aug-2024:
-  *		- fine tuned TIM4 delay function
-  *			-> TIM4 is on 72MHz bus
-  *			-> prescaler set to 18 (well, 18 - 1) ... 4MHz counter frequency
-  *			-> modified delay_us() function to account for 4MHz clock
-  *		- deactivated all column drivers in default switch condition
   *
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
@@ -117,19 +80,19 @@
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
-#define RED_PIN				GPIO_PIN_5
-#define BLUE_PIN			GPIO_PIN_2
-#define GREEN_PIN			GPIO_PIN_4
+#define RED_PIN							GPIO_PIN_5
+#define BLUE_PIN						GPIO_PIN_2
+#define GREEN_PIN						GPIO_PIN_4
 
 #define SLIDE_SWITCH_PORT		GPIOA
 #define SLIDE_SWITCH_PIN		GPIO_PIN_7
 
-#define CHARGE_PORT		GPIOF
-#define CHARGE_PIN		GPIO_PIN_1
+#define CHARGE_PORT					GPIOF
+#define CHARGE_PIN					GPIO_PIN_1
 
-#define NUM_LED_CATHODES	(7)
+#define NUM_LED_CATHODES		(7)
 
-#define ANIMATION_DELAY		(250)
+#define ANIMATION_DELAY			(250)
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM1 Timer ... will be used for display muxing */
@@ -189,15 +152,61 @@ int main(void)
 		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
 		HAL_Delay(ANIMATION_DELAY);
 		
-		/* testing led array */
+		/* testing led array ...
+				-> illminate individual display element one at a time */
 		for(uint8_t i = 0; i < max_leds; i++)
 		{
-			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].segment_GPIOB;
+			/* add display element bit to BSSR low (set) word to illuminate selected display element
+					-> NOTE - this is destructive to all other display elements associated with this scan line,
+										to preserve other picture elements use |= (see "leave trail" loop below) */
+			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA;
+			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB;
 			HAL_Delay(100);
-			LED_display_buffer[LED_port_position[i].scan_line][0] = 0x98000000;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = 0x01e80000;
+			
+			/* remove display element bit from BSRR low (set) word */
+			LED_display_buffer[LED_port_position[i].scan_line][0] &= ~LED_port_position[i].set_segment_GPIOA;
+			LED_display_buffer[LED_port_position[i].scan_line][1] &= ~LED_port_position[i].set_segment_GPIOB;
+			
+			/* add display element bit to BSRR high (reset) word to extinguish display element */
+			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].reset_segment_GPIOA;
+			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].reset_segment_GPIOB;
 		}
+		
+		/* clear display buffer */
+		for(uint8_t i = 0; i < NUM_LED_CATHODES; i++)
+		{
+			LED_display_buffer[i][0] = 0;
+			LED_display_buffer[i][1] = 0;
+		}
+		
+		HAL_Delay(500);
+		
+		/* leave trail of display elements (i.e. OR new bit selection with previous value) */
+		for(uint8_t i = 0; i < max_leds; i++)
+		{
+			LED_display_buffer[LED_port_position[i].scan_line][0] |= LED_port_position[i].set_segment_GPIOA;
+			LED_display_buffer[LED_port_position[i].scan_line][1] |= LED_port_position[i].set_segment_GPIOB;
+			
+			HAL_Delay(100);
+		}
+		
+		HAL_Delay(500);		
+		
+		/* pick up trail of display elements (in reverse order) */
+		for(uint8_t i = 0; i < max_leds; i++)
+		{
+			/* remove display element bit from BSRR low (set) word */
+			LED_display_buffer[LED_port_position[max_leds - 1 - i].scan_line][0] &= ~LED_port_position[max_leds - 1 - i].set_segment_GPIOA;
+			LED_display_buffer[LED_port_position[max_leds - 1 - i].scan_line][1] &= ~LED_port_position[max_leds - 1 - i].set_segment_GPIOB;
+			
+			/* add display element bit to BSRR high (reset) word */
+			LED_display_buffer[LED_port_position[max_leds - 1 - i].scan_line][0] |= LED_port_position[max_leds - 1 - i].reset_segment_GPIOA;
+			LED_display_buffer[LED_port_position[max_leds - 1 - i].scan_line][1] |= LED_port_position[max_leds - 1 - i].reset_segment_GPIOB;
+			HAL_Delay(100);
+		}
+		
+		HAL_Delay(500);
+		
 	}
 }
 

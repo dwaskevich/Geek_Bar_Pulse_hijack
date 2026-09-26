@@ -129,7 +129,7 @@
 
 #define NUM_LED_CATHODES	(7)
 
-//#define ANIMATION_DELAY		(250)
+#define ANIMATION_DELAY		(250)
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM1 Timer ... will be used for display muxing */
@@ -175,6 +175,19 @@ int main(void)
   {		
 		/* read charging indicator ... illuninate BLUE LEDs if charging is active */
 		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
+		
+		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+		HAL_Delay(ANIMATION_DELAY);
 		
 		/* testing led array */
 		for(uint8_t i = 0; i < max_leds; i++)

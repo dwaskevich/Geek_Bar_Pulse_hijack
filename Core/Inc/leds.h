@@ -76,8 +76,6 @@ typedef struct
 	uint8_t  scan_line;
 	uint32_t set_segment_GPIOA;
 	uint32_t set_segment_GPIOB;
-	uint32_t reset_segment_GPIOA;
-	uint32_t reset_segment_GPIOB;
 } LED_port_position_t;
 
 extern const LED_port_position_t LED_port_position[MAX_LEDS];

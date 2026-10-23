@@ -94,6 +94,7 @@
 
 #define ANIMATION_DELAY			(250)
 #define PATTERN_DELAY				(100)
+#define BSRR_RESET_SHIFT		(16)
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM1 Timer ... will be used for display muxing */
@@ -163,17 +164,17 @@ int main(void)
 										to preserve other display elements use |= (see "leave trail" loop below) */
 			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA;
 			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB;
-			
+
 			/* hold display element illumination for a pre-defined delay */
 			HAL_Delay(PATTERN_DELAY);
 			
 			/* remove display element bit from BSRR low (set) word */
 			LED_display_buffer[LED_port_position[i].scan_line][0] &= ~LED_port_position[i].set_segment_GPIOA;
 			LED_display_buffer[LED_port_position[i].scan_line][1] &= ~LED_port_position[i].set_segment_GPIOB;
-			
+
 			/* add display element bit to BSRR high (reset) word to extinguish display element */
-			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].reset_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].reset_segment_GPIOB;
+			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA << BSRR_RESET_SHIFT;
+			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB << BSRR_RESET_SHIFT;
 		}
 		
 		/* clear display buffer */
@@ -190,7 +191,7 @@ int main(void)
 		{
 			LED_display_buffer[LED_port_position[i].scan_line][0] |= LED_port_position[i].set_segment_GPIOA;
 			LED_display_buffer[LED_port_position[i].scan_line][1] |= LED_port_position[i].set_segment_GPIOB;
-			
+
 			HAL_Delay(PATTERN_DELAY);
 		}
 		
@@ -203,9 +204,10 @@ int main(void)
 			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA;
 			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB;
 			
-			/* add display element bit to BSRR high (reset) word */
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] |= LED_port_position[MAX_LEDS - 1 - i].reset_segment_GPIOA;
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] |= LED_port_position[MAX_LEDS - 1 - i].reset_segment_GPIOB;
+			/* add display element bit to BSRR high (reset) word */	
+			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA << BSRR_RESET_SHIFT;
+			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB << BSRR_RESET_SHIFT;
+			
 			HAL_Delay(PATTERN_DELAY);
 		}
 		

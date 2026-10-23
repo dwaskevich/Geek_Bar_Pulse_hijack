@@ -49,6 +49,21 @@
   *		- added LED mapping (leds.h)
 	*		- verified mapping with test animation
   *
+  * Update 22-Oct-2026:
+  *		- corrected device selection (mistakenly created project with py32f003x8
+	*			selected as device for Target_1 instead of py32f030x8)
+	*			-> tried to change it in "Options for Target_1" but Puya device script
+	*				 has an error that loads py32f031 startup file as well ... which
+	*				 causes compile to fail. Had to use RTE to uncheck the automatic
+	*				 device startup and add startup_py32F030x8.s and system_py32f0xx.c
+	*				 manually to the project's source group.
+	*		- created an leds.c source file and moved led matrix to the .c file.
+  *		- updated leds.h to declare the led matrix as extern
+  *
+  * Update 23-Oct-2026:
+  *		- removed reset_segment from LED_port_position, replaced with
+	*			<< BSRR_RESET_SHIFT (16)
+	*		- 
   *
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
@@ -135,6 +150,15 @@ int main(void)
   {
     APP_ErrorHandler();
   }
+	
+	while(1)
+	{
+		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
+			HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
+		else
+			HAL_GPIO_WritePin(GPIOA, RED_PIN, 1);
+		
+	}
 
   while (1)
   {		
@@ -267,6 +291,7 @@ static void APP_SystemClockConfig(void)
   * @retval None
 	*
 	*	djjw ... mapping Geek Bar Pulse PCB layout (https://github.com/schlae/VapeRE/tree/main/BD0027)
+	*						to GPIO initialization
 	*
   */
 static void GPIO_Init(void)
@@ -279,6 +304,7 @@ static void GPIO_Init(void)
 	/* declare an init structure */
 	GPIO_InitTypeDef GPIO_InitStruct = {0};	
 	
+	/* initialize GPIO Port A LED pins as outputs */
 	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
@@ -286,12 +312,14 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 	
+	/* initialize GPIO Port A Slide Switch pin as input */
 	GPIO_InitStruct.Pin = SLIDE_SWITCH_PIN;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	
 	HAL_GPIO_Init(SLIDE_SWITCH_PORT, &GPIO_InitStruct);
 	
+	/* initialize GPIO Port B LED pins as outputs */
 	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
@@ -299,12 +327,14 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 	
-	GPIO_InitStruct.Pin = GPIO_PIN_1;
+	/* initialize GPIO Port F charge pin as input */
+	GPIO_InitStruct.Pin = CHARGE_PIN;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	
-	HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+	HAL_GPIO_Init(CHARGE_PORT, &GPIO_InitStruct);
 	
+	/* initialize GPIO Port F LED pin as output */
 	GPIO_InitStruct.Pin = GPIO_PIN_2;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
@@ -345,6 +375,16 @@ static void TIM1_Init(void)
 	*
 	*	djjw ... LED display mux ISR (600Hz refresh rate)
 	*
+	*	Notes on HAL interrupt plumbing:
+	*		- hardware interrupt vector table is mapped in startup_py32f030x8.s
+	*		- handler must be placed in py32f0xx_it.c
+	*			-> reference example in puya's sdk TIMER1 TIM1_Update_IT example:
+	*				 PY32F0xx_Firmware-master\PY32F0xx_Firmware-master\Projects\PY32F030-STK\Example\TIMER1\TIM1_Update_IT\Src
+	*		- py32f0xx_hal_tim.c has a weak definition of the callback:
+	*			-> __weak void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+	*		- HAL_TIM_PeriodElapsedCallback definition here overrides weak definition
+	*			in SDK source file
+	*
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {	
@@ -356,7 +396,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	#define PORTA_ANODE_MASK	0x98000000
 	#define PORTB_ANODE_MASK	0x01e80000
 	
-	(void) htim; /* suppress compiler warning */
+	(void) htim; /* suppress compiler warning (if more than one timer, use htim->Instance) */
 	static uint8_t cathode_counter = 0;
 	
 	/* Constant mapping of cathode activation masks (Upper 16-bits of BSRR for Reset) */

@@ -151,6 +151,10 @@ int main(void)
     APP_ErrorHandler();
   }
 	
+	HAL_GPIO_WritePin(GPIOA, GREEN_PIN, 1);
+	while(1)
+		;
+	
 	while(1)
 	{
 		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
@@ -312,12 +316,19 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 	
-	/* initialize GPIO Port A Slide Switch pin as input */
+	/* initialize GPIO Port A Slide Switch pin as both edge interrupt and enable NVIC */
 	GPIO_InitStruct.Pin = SLIDE_SWITCH_PIN;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	
 	HAL_GPIO_Init(SLIDE_SWITCH_PORT, &GPIO_InitStruct);
+	
+	/* Enable EXTI interrupt */
+  HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
+	
+  /* Configure interrupt priority */
+  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
 	
 	/* initialize GPIO Port B LED pins as outputs */
 	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;

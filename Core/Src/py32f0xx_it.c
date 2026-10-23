@@ -102,4 +102,16 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
   HAL_TIM_IRQHandler(&htim1);
 }
 
+/**
+  * @brief This function handles EXTI4_15 Interrupt .
+	*
+	*	djjw ... copied from PY32F0xx Firmware Master SDK download (EXTI code example)
+	*
+  */
+void EXTI4_15_IRQHandler(void)
+{
+  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);
+}
+
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

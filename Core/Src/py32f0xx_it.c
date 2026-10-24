@@ -110,8 +110,7 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
   */
 void EXTI4_15_IRQHandler(void)
 {
-  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);
+  HAL_GPIO_EXTI_IRQHandler(SLIDE_SWITCH_PIN);
 }
 
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

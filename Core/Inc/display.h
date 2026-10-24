@@ -19,6 +19,7 @@ enum
 
 
 void display_cathodes_off(void);
+void display_anodes_off(void);
 
 
 #endif

@@ -69,6 +69,9 @@
   *		- implemented test code to measure low-power stop current
 	*			-> 75-79 uA
   *		- created enter_low_power() function
+	*		- moved LED mux timer to TIM16 (reserve TIM1 for TB1/TB2 PWM AF):
+	*			-> updated py32f0xx_it.c
+	*			-> updated py32f0xx_hal_msp.c
   *
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
@@ -119,8 +122,11 @@
 #define DEBUG_DEVELOP				0
 
 /* Private variables ---------------------------------------------------------*/
-/* Handle for the TIM1 Timer ... will be used for display muxing */
-TIM_HandleTypeDef		htim1 = {0};
+/* Handle for the TIM16 Timer ... will be used for display muxing */
+TIM_HandleTypeDef		htim16 = {0};
+
+/* Handle for the TIM14 Timer ... will be used for 10 second inactivity timer */
+TIM_HandleTypeDef		htim14 = {0};
 
 /* LED display 7-anode array (note - anodes span GPIO Port A and B) */
 volatile uint32_t LED_display_buffer[7][2] = {0};
@@ -133,7 +139,7 @@ volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
-static void TIM1_Init(void);
+static void TIM16_Init(void);
 static void enter_low_power(void);
 
 /**
@@ -153,11 +159,11 @@ int main(void)
 	/* djjw - initialize pins */
 	GPIO_Init();
 	
-	/* djjw - initialize TIM1 timer */
-	TIM1_Init();
+	/* djjw - initialize TIM16 timer (LED mux) */
+	TIM16_Init();
 	
 	/* Start the TIM1 Base generation in interrupt mode */
-  if (HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
+  if (HAL_TIM_Base_Start_IT(&htim16) != HAL_OK)
   {
     APP_ErrorHandler();
   }
@@ -419,25 +425,25 @@ static void GPIO_Init(void)
 }
 
 /**
-  * @brief  TIM1 Config
+  * @brief  TIM16 Config
   * @param  None
   * @retval None
 	*
 	*	djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz
 	*
   */
-static void TIM1_Init(void)
+static void TIM16_Init(void)
 {	
-	htim1.Instance               = TIM1;                             /* Select TIM1 */
-  htim1.Init.Period            = 1000 - 1;                         /* Auto-reload value */
-  htim1.Init.Prescaler         = 40 - 1;                           /* Prescaler of 40 - 1 */
-  htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
-  htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
-  htim1.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;   /* Auto-reload register not buffered */
+	htim16.Instance               = TIM16;                            /* Select TIM16 */
+  htim16.Init.Period            = 1000 - 1;                         /* Auto-reload value */
+  htim16.Init.Prescaler         = 40 - 1;                           /* Prescaler of 40 - 1 */
+  htim16.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
+  htim16.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
+  htim16.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;   /* Auto-reload register not buffered */
 	
-  /* Initialize TIM1 */
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  /* Initialize TIM16 */
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
   {
     APP_ErrorHandler();
   }
@@ -570,7 +576,7 @@ void enter_low_power(void)
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 	/* stop TIM1 timer and suspend SysTick */
-	HAL_TIM_Base_Stop_IT(&htim1);
+	HAL_TIM_Base_Stop_IT(&htim16);
 	HAL_SuspendTick();
 	
 	/* Enter STOP mode with interrupt wakeup */
@@ -596,7 +602,7 @@ void enter_low_power(void)
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 	
 	HAL_ResumeTick();
-	HAL_TIM_Base_Start_IT(&htim1);
+	HAL_TIM_Base_Start_IT(&htim16);
 }
 
 #ifdef  USE_FULL_ASSERT

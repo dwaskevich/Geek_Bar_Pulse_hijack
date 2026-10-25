@@ -40,7 +40,7 @@
 /* Private function prototypes -----------------------------------------------*/
 /* Private user code ---------------------------------------------------------*/
 /* External variables --------------------------------------------------------*/
-extern TIM_HandleTypeDef    htim1;
+extern TIM_HandleTypeDef    htim16;
 
 /******************************************************************************/
 /*           Cortex-M0+ Processor Interruption and Exception Handlers          */ 
@@ -92,14 +92,14 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles TIM1 Interrupt .
+  * @brief This function handles TIM16 Interrupt .
 	*
-	*	djjw ... copied from PY32F0xx Firmware Master SDK download (Timer code example)
+	*	djjw ... copied from PY32F0xx Firmware Master SDK download (Timer16 code example)
 	*
   */
-void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
+void TIM16_IRQHandler(void)
 {
-  HAL_TIM_IRQHandler(&htim1);
+  HAL_TIM_IRQHandler(&htim16);
 }
 
 /**

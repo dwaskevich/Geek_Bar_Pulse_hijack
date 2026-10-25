@@ -61,9 +61,14 @@
   *		- updated leds.h to declare the led matrix as extern
   *
   * Update 23-Oct-2026:
-  *		- removed reset_segment from LED_port_position, replaced with
-	*			<< BSRR_RESET_SHIFT (16)
-	*		- 
+  *		- removed reset_segment from LED_port_position structure, replaced with
+	*			simple left shift of set_segment value (<< BSRR_RESET_SHIFT (16))
+	*		- first pass slide switch gpio configuration (exti wakeup source)
+  *
+  * Update 24-Oct-2026:
+  *		- implemented test code to measure low-power stop current
+	*			-> 75-79 uA
+  *		- created enter_low_power() function
   *
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
@@ -99,9 +104,6 @@
 #define BLUE_PIN						GPIO_PIN_2
 #define GREEN_PIN						GPIO_PIN_4
 
-//#define SLIDE_SWITCH_PORT		GPIOA
-//#define SLIDE_SWITCH_PIN		GPIO_PIN_7
-
 #define CHARGE_PORT					GPIOF
 #define CHARGE_PIN					GPIO_PIN_1
 
@@ -114,7 +116,7 @@
 
 #define DEBOUNCE_LOCKOUT_MS	(5)
 
-#define DEBUG_DEVELOP				1
+#define DEBUG_DEVELOP				0
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM1 Timer ... will be used for display muxing */
@@ -132,6 +134,7 @@ volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM1_Init(void);
+static void enter_low_power(void);
 
 /**
   * @brief  Main program.
@@ -145,7 +148,7 @@ int main(void)
   /* Configure the system clock */
   APP_SystemClockConfig();
 	
-	HAL_Delay(10000); /* safety time delay in case SWD port bricked by firmware ... remove later */
+	HAL_Delay(2000); /* safety time delay in case SWD port bricked by firmware ... remove later */
 	
 	/* djjw - initialize pins */
 	GPIO_Init();
@@ -162,9 +165,26 @@ int main(void)
 #if DEBUG_DEVELOP
 //	while(1);
 	
+//	while(1)
+//	{
+//		/* read charging indicator ... illuninate BLUE LEDs if charging is active */
+//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);		
+//	}
+	
 	while(1)
 	{
+		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
+			HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
+		else
+			HAL_GPIO_WritePin(GPIOA, RED_PIN, 1);
+	}
+	
+#endif
+
+  while(1)
+	{
 		uint32_t last_processed_time = 0;
+		static int16_t animation_cycle_count = 3;
 		
 		/* --- Deferred Interrupt Processing Area --- */
     if (switch_event_pending) 
@@ -180,7 +200,7 @@ int main(void)
         /* read slide switch pin */
         if (HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == GPIO_PIN_RESET)
         {
-          /* falling edge ... slide switch moved to "close" */
+          /* falling edge ... slide switch moved to "close", prepare for low-power stop */
           HAL_GPIO_TogglePin(GPIOA, RED_PIN);
 					HAL_Delay(50);
 					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
@@ -194,242 +214,97 @@ int main(void)
 					HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
 					HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
 					
-					display_cathodes_off();
+					enter_low_power();
 					
-					/* declare an init structure */
-					GPIO_InitTypeDef GPIO_InitStruct = {0};	
-					
-					/* turn GPIO Port A LED pins to analog to save power */
-					GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
-					GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-					GPIO_InitStruct.Pull = GPIO_NOPULL;
-					GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-					
-					HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-					
-					/* turn GPIO Port B LED pins to analog to save power */
-					GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
-					GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-					GPIO_InitStruct.Pull = GPIO_NOPULL;
-					GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-					
-					HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-					
-//					__HAL_RCC_GPIOB_CLK_DISABLE();
-//					__HAL_RCC_GPIOF_CLK_DISABLE();
-					
-					
-//					display_anodes_off();
-//					display_cathodes_off();
-					HAL_TIM_Base_Stop_IT(&htim1);
-					HAL_SuspendTick();
-//					/* VCORE = 1.0V  when enter stop mode */
-//					PWR_StopModeConfigTypeDef PwrStopModeConf = {0};
-//					PwrStopModeConf.LPVoltSelection       =  PWR_STOPMOD_LPR_VOLT_SCALE2;
-//					PwrStopModeConf.FlashDelay            =  PWR_WAKEUP_FLASH_DELAY_5US;
-//					PwrStopModeConf.WakeUpHsiEnableTime   =  PWR_WAKEUP_HSIEN_AFTER_MR;
-//					PwrStopModeConf.RegulatorSwitchDelay  =  PWR_WAKEUP_LPR_TO_MR_DELAY_2US;
-//					PwrStopModeConf.SramRetentionVolt     =  PWR_SRAM_RETENTION_VOLT_VOS;
-//					HAL_PWR_ConfigStopMode(&PwrStopModeConf);
-					
-					/* Enter STOP mode with interrupt wakeup */
-//					HAL_PWR_EnterSLEEPMode(PWR_SLEEPENTRY_WFI);
-					HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
-					APP_SystemClockConfig();
-					
-//					__HAL_RCC_GPIOB_CLK_ENABLE();
-//					__HAL_RCC_GPIOF_CLK_ENABLE();
-					
-					/* return GPIO Port A LED pins to outputs */
-					GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
-					GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-					GPIO_InitStruct.Pull = GPIO_PULLUP;
-					GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-					
-					HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-					
-					/* return GPIO Port B LED pins to outputs */
-					GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
-					GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-					GPIO_InitStruct.Pull = GPIO_PULLUP;
-					GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-					
-					HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-					
-					HAL_ResumeTick();
-					HAL_TIM_Base_Start_IT(&htim1);
+					animation_cycle_count = 3; /* reset run-mode animation loop count */
         }
         else /* rising edge - slide switch moved to "pulse" */
         {
           HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 1);
-//					HAL_Delay(50);
-//					HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
         }
       }			
-		}		
-					
-		/* animate peripheral RGB LEDs */
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-		HAL_Delay(ANIMATION_DELAY);
+		}
 		
-		/* testing led array ...
-				-> illminate individual display element one at a time */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
+		for(uint8_t i = 0; i < animation_cycle_count; i++)
 		{
-			/* write display element bit to BSSR low (set) word to illuminate selected display element
-					-> NOTE - this is destructive to all other display elements associated with this scan line,
-										to preserve other display elements use |= (see "leave trail" loop below) */
-			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB;
-
-			/* hold display element illumination for a pre-defined delay */
-			HAL_Delay(PATTERN_DELAY);
+			/* animate peripheral RGB LEDs */
+			HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+			HAL_Delay(ANIMATION_DELAY);
+			HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+			HAL_Delay(ANIMATION_DELAY);
+			HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+			HAL_Delay(ANIMATION_DELAY);
+			HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+			HAL_Delay(ANIMATION_DELAY);
+			HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+			HAL_Delay(ANIMATION_DELAY);
+			HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+			HAL_Delay(ANIMATION_DELAY);
 			
-			/* remove display element bit from BSRR low (set) word */
-			LED_display_buffer[LED_port_position[i].scan_line][0] &= ~LED_port_position[i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] &= ~LED_port_position[i].set_segment_GPIOB;
+			/* testing led array ...
+					-> illminate individual display element one at a time */
+			for(uint8_t i = 0; i < MAX_LEDS; i++)
+			{
+				/* write display element bit to BSSR low (set) word to illuminate selected display element
+						-> NOTE - this is destructive to all other display elements associated with this scan line,
+											to preserve other display elements use |= (see "leave trail" loop below) */
+				LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA;
+				LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB;
 
-			/* add display element bit to BSRR high (reset) word to extinguish display element */
-			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA << BSRR_RESET_SHIFT;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB << BSRR_RESET_SHIFT;
-		}
-		
-		/* clear display buffer */
-		for(uint8_t i = 0; i < NUM_LED_CATHODES; i++)
-		{
-			LED_display_buffer[i][0] = 0;
-			LED_display_buffer[i][1] = 0;
-		}
-		
-		HAL_Delay(500);
-		
-		/* leave trail of display elements (i.e. OR new bit selection with previous value) */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			LED_display_buffer[LED_port_position[i].scan_line][0] |= LED_port_position[i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] |= LED_port_position[i].set_segment_GPIOB;
+				/* hold display element illumination for a pre-defined delay */
+				HAL_Delay(PATTERN_DELAY);
+				
+				/* remove display element bit from BSRR low (set) word */
+				LED_display_buffer[LED_port_position[i].scan_line][0] &= ~LED_port_position[i].set_segment_GPIOA;
+				LED_display_buffer[LED_port_position[i].scan_line][1] &= ~LED_port_position[i].set_segment_GPIOB;
 
-			HAL_Delay(PATTERN_DELAY);
-		}
-		
-		HAL_Delay(500);		
-		
-		/* pick up trail of display elements (in reverse order) */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			/* remove display element bit from BSRR low (set) word */
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB;
+				/* add display element bit to BSRR high (reset) word to extinguish display element */
+				LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA << BSRR_RESET_SHIFT;
+				LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB << BSRR_RESET_SHIFT;
+			}
 			
-			/* add display element bit to BSRR high (reset) word */	
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA << BSRR_RESET_SHIFT;
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB << BSRR_RESET_SHIFT;
+			/* clear display buffer */
+			for(uint8_t i = 0; i < NUM_LED_CATHODES; i++)
+			{
+				LED_display_buffer[i][0] = 0;
+				LED_display_buffer[i][1] = 0;
+			}
 			
-			HAL_Delay(PATTERN_DELAY);
-		}
-		
-		HAL_Delay(500);
-		
-	}
-	
-	while(1)
-	{
-		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
-			HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-		else
-			HAL_GPIO_WritePin(GPIOA, RED_PIN, 1);
-		
-	}
-	
-#endif
-
-  while (1)
-  {		
-		/* read charging indicator ... illuninate BLUE LEDs if charging is active */
-		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
-		
-		/* animate peripheral RGB LEDs */
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-		HAL_Delay(ANIMATION_DELAY);
-		
-		/* testing led array ...
-				-> illminate individual display element one at a time */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			/* write display element bit to BSSR low (set) word to illuminate selected display element
-					-> NOTE - this is destructive to all other display elements associated with this scan line,
-										to preserve other display elements use |= (see "leave trail" loop below) */
-			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB;
-
-			/* hold display element illumination for a pre-defined delay */
-			HAL_Delay(PATTERN_DELAY);
+			HAL_Delay(500);
 			
-			/* remove display element bit from BSRR low (set) word */
-			LED_display_buffer[LED_port_position[i].scan_line][0] &= ~LED_port_position[i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] &= ~LED_port_position[i].set_segment_GPIOB;
+			/* leave trail of display elements (i.e. OR new bit selection with previous value) */
+			for(uint8_t i = 0; i < MAX_LEDS; i++)
+			{
+				LED_display_buffer[LED_port_position[i].scan_line][0] |= LED_port_position[i].set_segment_GPIOA;
+				LED_display_buffer[LED_port_position[i].scan_line][1] |= LED_port_position[i].set_segment_GPIOB;
 
-			/* add display element bit to BSRR high (reset) word to extinguish display element */
-			LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA << BSRR_RESET_SHIFT;
-			LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB << BSRR_RESET_SHIFT;
-		}
-		
-		/* clear display buffer */
-		for(uint8_t i = 0; i < NUM_LED_CATHODES; i++)
-		{
-			LED_display_buffer[i][0] = 0;
-			LED_display_buffer[i][1] = 0;
-		}
-		
-		HAL_Delay(500);
-		
-		/* leave trail of display elements (i.e. OR new bit selection with previous value) */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			LED_display_buffer[LED_port_position[i].scan_line][0] |= LED_port_position[i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[i].scan_line][1] |= LED_port_position[i].set_segment_GPIOB;
-
-			HAL_Delay(PATTERN_DELAY);
-		}
-		
-		HAL_Delay(500);		
-		
-		/* pick up trail of display elements (in reverse order) */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			/* remove display element bit from BSRR low (set) word */
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA;
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB;
+				HAL_Delay(PATTERN_DELAY);
+			}
 			
-			/* add display element bit to BSRR high (reset) word */	
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA << BSRR_RESET_SHIFT;
-			LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB << BSRR_RESET_SHIFT;
+			HAL_Delay(500);		
 			
-			HAL_Delay(PATTERN_DELAY);
+			/* pick up trail of display elements (in reverse order) */
+			for(uint8_t i = 0; i < MAX_LEDS; i++)
+			{
+				/* remove display element bit from BSRR low (set) word */
+				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA;
+				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB;
+				
+				/* add display element bit to BSRR high (reset) word */	
+				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA << BSRR_RESET_SHIFT;
+				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB << BSRR_RESET_SHIFT;
+				
+				HAL_Delay(PATTERN_DELAY);
+			}
+			
+			HAL_Delay(500);
+			
 		}
 		
-		HAL_Delay(500);
+		animation_cycle_count = 0;
 		
+		LED_display_buffer[LED_port_position[rocket].scan_line][0] = LED_port_position[rocket].set_segment_GPIOA;
+		LED_display_buffer[LED_port_position[rocket].scan_line][1] = LED_port_position[rocket].set_segment_GPIOB;
 	}
 }
 
@@ -452,7 +327,7 @@ static void APP_SystemClockConfig(void)
 #if defined(RCC_HSIDIV_SUPPORT)
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;                          /* HSI not divided */
 #endif
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_8MHz; /* Configure HSI clock as 8MHz ... djjw changed to 24MHz */
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_24MHz; /* Configure HSI clock as 8MHz ... djjw changed to 24MHz */
   RCC_OscInitStruct.HSEState = RCC_HSE_OFF;                         /* Disable HSE */
   /*RCC_OscInitStruct.HSEFreq = RCC_HSE_16_32MHz;*/
   RCC_OscInitStruct.LSIState = RCC_LSI_OFF;                         /* Disable LSI */
@@ -483,8 +358,8 @@ static void APP_SystemClockConfig(void)
   * @param  None
   * @retval None
 	*
-	*	djjw ... mapping Geek Bar Pulse PCB layout (https://github.com/schlae/VapeRE/tree/main/BD0027)
-	*						to GPIO initialization
+	*	djjw ... mapping Geek Bar Pulse PCB to GPIOs
+	*				-> (https://github.com/schlae/VapeRE/tree/main/BD0027)
 	*
   */
 static void GPIO_Init(void)
@@ -555,7 +430,7 @@ static void TIM1_Init(void)
 {	
 	htim1.Instance               = TIM1;                             /* Select TIM1 */
   htim1.Init.Period            = 1000 - 1;                         /* Auto-reload value */
-  htim1.Init.Prescaler         = 13 - 1;                           /* Prescaler of 40 - 1 */
+  htim1.Init.Prescaler         = 40 - 1;                           /* Prescaler of 40 - 1 */
   htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
   htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
   htim1.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
@@ -661,6 +536,67 @@ void APP_ErrorHandler(void)
   while (1)
   {
   }
+}
+
+/**
+  * @brief  Low power stop mode
+  * @param  None
+  * @retval None
+	*
+	*	djjw ... prepares system for and enters low power stop.
+	*
+  */
+void enter_low_power(void)
+{
+	display_cathodes_off(); /* turn off all display cathodes */
+		
+	/* put GPIO in low-power state (analog is best choice to avoid leakage current) */
+	GPIO_InitTypeDef GPIO_InitStruct = {0};	
+	
+	/* GPIOA */
+	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	
+	/* GPIOB */
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
+	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+	/* stop TIM1 timer and suspend SysTick */
+	HAL_TIM_Base_Stop_IT(&htim1);
+	HAL_SuspendTick();
+	
+	/* Enter STOP mode with interrupt wakeup */
+	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+	
+	/* exit from stop ... reconfigure clocks and gpio, restart timer and SysTick */
+	APP_SystemClockConfig();
+	
+	/* return GPIO Port A LED pins to outputs */
+	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	
+	/* return GPIO Port B LED pins to outputs */
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+	
+	HAL_ResumeTick();
+	HAL_TIM_Base_Start_IT(&htim1);
 }
 
 #ifdef  USE_FULL_ASSERT

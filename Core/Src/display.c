@@ -162,3 +162,39 @@ void display_decimal(uint8_t display, uint16_t value)
 		}		
 	}	
 }
+
+void display_hex(uint8_t display, uint16_t value)
+{
+	uint16_t tempVal, i = 0;
+	if(display_top == display | display_bottom == display)
+	{	
+		if(value > 0x1ff)
+				value = 0x1ff;
+		
+		if(0 == value)
+		{
+			display_seven_segment(seven_segment_displays[display][0], value);
+			display_seven_segment(seven_segment_displays[display][1], value);
+			display_seven_segment(seven_segment_displays[display][2], CLEAR_DISPLAY);
+		}
+		else
+		{
+			while(0 != value)
+			{
+				tempVal = value%16;
+				display_seven_segment(seven_segment_displays[display][i], tempVal);
+				value = value/16;
+				i++;
+				if(0 == value)
+				{
+					while(i < NUM_DIGITS)
+					{
+						if(2 == i)
+							display_seven_segment(seven_segment_displays[display][i], CLEAR_DISPLAY);
+						i++;
+					}
+				}
+			}			
+		}		
+	}	
+}

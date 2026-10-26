@@ -80,6 +80,12 @@
 	*			-> serves as wakeup source, disables sleep/stop mode
   *		- implemented display functions
   *		- created gpio_defines.h to hold pin configuration info
+  *
+  * Update 26-Oct-2026:
+  *		- implemented 7-segment display functions
+	*			-> display_seven_segment() ... individual digit
+	*			-> display_decimal() ... upper or lower 2.1 digit display
+	*			-> display_hex() ... upper or lower 2.1 digit display
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -189,12 +195,13 @@ int main(void)
 #endif
 	
 #if DEBUG_DEVELOP
-	uint8_t count = 0;
+	uint16_t count = 0;
 	while(1)
 	{
-		display_decimal(display_top, count++);
-		display_decimal(display_bottom, 199-count);
-		HAL_Delay(50);
+		display_hex(display_top, count);
+		display_hex(display_bottom, 0x1ff - count);
+		count = (count + 1) % 0x1ff;
+		HAL_Delay(750);
 	}
 	
 	while(1)

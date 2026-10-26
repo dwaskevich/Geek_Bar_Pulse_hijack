@@ -16,6 +16,7 @@
 #include "py32f0xx_hal.h"
 
 #define BSRR_RESET_SHIFT		(16)
+#define NUM_ELEMENTS				(0)
 
 extern volatile uint32_t LED_display_buffer[7][2];
 
@@ -63,7 +64,7 @@ void display_all(void)
 
 void display_led(uint16_t led, uint8_t value)
 {
-	if(1 == value)
+	if(0 != value)
 	{
 		/* add display element bit to BSRR low (set) word */
 		LED_display_buffer[LED_port_position[led].scan_line][0] |= LED_port_position[led].set_segment_GPIOA;
@@ -94,15 +95,15 @@ void display_led_toggle(uint16_t led)
 
 void display_group(uint8_t group, uint8_t value)
 {
-	for(uint8_t i = 0; i < led_group_array[group][0]; i++)
+	for(uint8_t i = 0; i < led_group_array[group][NUM_ELEMENTS]; i++)
 	{
-		display_led(led_group_array[group][i + 1], value);
+		display_led(led_group_array[group][i + 1], (value >> i) & 0x01);
 	}	
 }
 
 void display_group_toggle(uint8_t group)
 {
-	for(uint8_t i = 0; i < led_group_array[group][0]; i++)
+	for(uint8_t i = 0; i < led_group_array[group][NUM_ELEMENTS]; i++)
 	{
 		display_led_toggle(led_group_array[group][i + 1]);
 	}

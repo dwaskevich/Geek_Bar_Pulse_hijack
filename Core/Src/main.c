@@ -119,11 +119,12 @@
 #define LED_ON							(1)
 
 #define ANIMATION_DELAY			(250)
-#define PATTERN_DELAY				(75)
+#define PATTERN_DELAY				(50)
+#define GROUP_DELAY					(100)
 
 #define DEBOUNCE_LOCKOUT_MS	(5)
 
-#define DEBUG_DEVELOP				0
+#define DEBUG_DEVELOP				1
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM16 Timer ... will be used for display muxing */
@@ -138,6 +139,8 @@ volatile uint32_t LED_display_buffer[7][2] = {0};
 volatile uint8_t  switch_event_pending = 0;   /* slide switch interrupt flag */
 volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 
+static int16_t animation_cycle_count = 2;
+
 _Bool low_power_enable = TRUE; /* global variable to authorize entering low power */
 
 /* Private user code ---------------------------------------------------------*/
@@ -147,6 +150,7 @@ static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM16_Init(void);
 static void enter_low_power(_Bool gate);
+static void run_test_patterns(void);
 
 /**
   * @brief  Main program.
@@ -185,6 +189,13 @@ int main(void)
 #endif
 	
 #if DEBUG_DEVELOP
+	while(1)
+	{
+		
+		
+		
+	}
+		
 //	while(1);
 	
 //	while(1)
@@ -282,7 +293,7 @@ while(1)
   while(1)
 	{
 		uint32_t last_processed_time = 0;
-		static int16_t animation_cycle_count = 2;
+//		static int16_t animation_cycle_count = 2;
 		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
 		HAL_GPIO_WritePin(GPIOA, GREEN_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
@@ -327,88 +338,7 @@ while(1)
       }			
 		}
 		
-		for(uint8_t i = 0; i < animation_cycle_count; i++)
-		{
-			/* animate peripheral RGB LEDs */
-			HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-			HAL_Delay(ANIMATION_DELAY);
-			HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-			HAL_Delay(ANIMATION_DELAY);
-			HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-			HAL_Delay(ANIMATION_DELAY);
-			HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-			HAL_Delay(ANIMATION_DELAY);
-			HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
-			HAL_Delay(ANIMATION_DELAY);
-			HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
-			HAL_Delay(ANIMATION_DELAY);
-			
-			/* testing led array ... */			
-			display_clear(); /* clear display */
-			
-			HAL_Delay(250);
-			
-			/* illuminate each display elements and leave trail */
-			for(uint8_t i = 0; i < MAX_LEDS; i++)
-			{
-				display_led(i, LED_ON);
-
-				HAL_Delay(PATTERN_DELAY);
-			}
-			
-			HAL_Delay(250);		
-			
-			/* pick up trail of display elements (in reverse order) */
-			for(uint8_t i = 0; i < MAX_LEDS; i++)
-			{
-				display_led(MAX_LEDS - 1 - i, LED_OFF);
-				
-				HAL_Delay(PATTERN_DELAY);
-			}
-			
-			/* flash display */
-			HAL_Delay(250);			
-			for(uint8_t i = 0; i < 3; i++)
-			{
-				display_all();
-				HAL_Delay(250);
-				display_clear();
-				HAL_Delay(250);
-			}
-			HAL_Delay(500);
-			
-			/* testing groups ... leave trail */
-			for(uint8_t i = 0; i < NUM_GROUPS; i++)
-			{
-				for(uint8_t j = 0; j < led_group_array[i][0]; j++)
-				{
-					display_led(led_group_array[i][j + 1], LED_ON);
-					
-					HAL_Delay(200);
-				}
-				HAL_Delay(500);
-			}
-			
-			HAL_Delay(1000);
-			
-			/* testing groups ... pick up trail (in reverse order) */
-			for(uint8_t i = 0; i < NUM_GROUPS; i++)
-			{			
-				for(uint8_t j = 0; j < led_group_array[NUM_GROUPS - 1 - i][0]; j++)
-				{
-					display_led(led_group_array[NUM_GROUPS - 1 - i][led_group_array[NUM_GROUPS - 1 - i][0] - 1 - j + 1], LED_OFF);
-					
-					HAL_Delay(200);
-				}
-				HAL_Delay(500);
-			}
-			
-			HAL_Delay(500);
-		}
-
-		display_led(rocket, LED_ON);
-		
-		animation_cycle_count = 0;
+		run_test_patterns();
 	}
 	
 }
@@ -716,6 +646,113 @@ void enter_low_power(_Bool gate)
 		HAL_ResumeTick();
 		HAL_TIM_Base_Start_IT(&htim16);
 	}
+}
+
+static void run_test_patterns(void)
+{
+	for(uint8_t i = 0; i < animation_cycle_count; i++)
+	{
+		/* animate peripheral RGB LEDs */
+		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+		HAL_Delay(ANIMATION_DELAY);
+		
+		/* testing led array ... */			
+		display_clear(); /* clear display */
+		
+		HAL_Delay(250);
+		
+		/* illuminate each display elements and leave trail */
+		for(uint8_t i = 0; i < MAX_LEDS; i++)
+		{
+			display_led(i, LED_ON);
+
+			HAL_Delay(PATTERN_DELAY);
+		}
+		
+		HAL_Delay(250);		
+		
+		/* pick up trail of display elements (in reverse order) */
+		for(uint8_t i = 0; i < MAX_LEDS; i++)
+		{
+			display_led(MAX_LEDS - 1 - i, LED_OFF);
+			
+			HAL_Delay(PATTERN_DELAY);
+		}
+		
+		/* flash display */
+		HAL_Delay(250);			
+		for(uint8_t i = 0; i < 3; i++)
+		{
+			display_all();
+			HAL_Delay(250);
+			display_clear();
+			HAL_Delay(250);
+		}
+		HAL_Delay(250);
+		
+		/* testing groups ... leave trail */
+		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		{
+			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
+			{
+				display_led(led_group_array[i][j + 1], LED_ON);
+				
+				HAL_Delay(PATTERN_DELAY);
+			}
+			HAL_Delay(250);
+		}
+		
+		HAL_Delay(250);
+		
+		/* testing groups ... pick up trail (in reverse order) */
+		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		{			
+			for(uint8_t j = 0; j < led_group_array[NUM_GROUPS - 1 - i][0]; j++)
+			{
+				display_led(led_group_array[NUM_GROUPS - 1 - i][led_group_array[NUM_GROUPS - 1 - i][0] - 1 - j + 1], LED_OFF);
+				
+				HAL_Delay(PATTERN_DELAY);
+			}
+			HAL_Delay(250);
+		}
+		
+		HAL_Delay(250);
+		
+		/* testing groups with display_group() */
+		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		{
+			display_group(i, 0xff);
+			HAL_Delay(GROUP_DELAY);
+		}
+		
+		HAL_Delay(250);
+		
+		/* testing groups with display_group() */
+		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		{			
+			display_group(NUM_GROUPS - 1 - i, 0x00);
+			HAL_Delay(GROUP_DELAY);
+		}
+		
+		HAL_Delay(250);
+	}
+
+	display_led(rocket, LED_ON);
+	
+	animation_cycle_count = 0;
+	
+	
+	
 }
 
 #ifdef  USE_FULL_ASSERT

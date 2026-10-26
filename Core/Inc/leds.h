@@ -76,6 +76,12 @@ enum
 /* enum to define LED groups */
 enum 
 {
+	one_top,
+	digit_top_left,
+	digit_top_right,
+	one_bot,
+	digit_bot_left,
+	digit_bot_right,
 	arc_top,
 	arc_bottom,
 	cycle,
@@ -92,6 +98,6 @@ typedef struct
 } LED_port_position_t;
 
 extern const LED_port_position_t LED_port_position[MAX_LEDS];
-extern const uint8_t led_group_array[NUM_GROUPS][6];
+extern const uint8_t led_group_array[NUM_GROUPS][8];
 
 #endif

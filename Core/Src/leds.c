@@ -72,8 +72,14 @@ const LED_port_position_t LED_port_position[MAX_LEDS] =
 };
 
 /* define LED groups */
-const uint8_t led_group_array[NUM_GROUPS][6] = {
+const uint8_t led_group_array[NUM_GROUPS][8] = {
 	/* # elements in group, LED identifiers ..., padding */
+	{2, one_top_upper, one_top_lower, 0, 0, 0, 0, 0},
+	{7, digit_top_left_a, digit_top_left_b, digit_top_left_c, digit_top_left_d, digit_top_left_e, digit_top_left_f, digit_top_left_g},
+	{7, digit_top_right_a, digit_top_right_b, digit_top_right_c, digit_top_right_d, digit_top_right_e, digit_top_right_f, digit_top_right_g},
+	{2, one_bot_upper, one_bot_lower, 0, 0, 0, 0, 0},
+	{7, digit_bot_left_a, digit_bot_left_b, digit_bot_left_c, digit_bot_left_d, digit_bot_left_e, digit_bot_left_f, digit_bot_left_g},
+	{7, digit_bot_right_a, digit_bot_right_b, digit_bot_right_c, digit_bot_right_d, digit_bot_right_e, digit_bot_right_f, digit_bot_right_g},
 	{5, arc_top_1, arc_top_2, arc_top_3, arc_top_4, arc_top_5},
 	{5, arc_bot_1, arc_bot_2, arc_bot_3, arc_bot_4, arc_bot_5},
 	{4, cycle_ne, cycle_se, cycle_sw, cycle_nw, 0},

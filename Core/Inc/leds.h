@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #define NUM_LED_CATHODES		(7)
+#define NUM_DIGITS					(3)
 
 /* enum to identify and define individual LEDs (from top to bottom) ... 53 in total */
 enum 
@@ -90,6 +91,14 @@ enum
 	NUM_GROUPS
 };
 
+/* enum to define 7-segment displays */
+enum 
+{
+	display_top,
+	display_bottom,
+	NUM_DISPLAYS
+};
+
 typedef struct
 {
 	uint8_t  scan_line;
@@ -99,5 +108,6 @@ typedef struct
 
 extern const LED_port_position_t LED_port_position[MAX_LEDS];
 extern const uint8_t led_group_array[NUM_GROUPS][8];
+extern const uint8_t seven_segment_displays[NUM_DISPLAYS][3];
 
 #endif

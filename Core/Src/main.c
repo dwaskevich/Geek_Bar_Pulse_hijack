@@ -124,7 +124,7 @@
 
 #define DEBOUNCE_LOCKOUT_MS	(5)
 
-#define DEBUG_DEVELOP				1
+#define DEBUG_DEVELOP				0
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM16 Timer ... will be used for display muxing */
@@ -189,11 +189,35 @@ int main(void)
 #endif
 	
 #if DEBUG_DEVELOP
+	uint8_t count = 0;
 	while(1)
 	{
-		
-		
-		
+		display_decimal(display_top, count++);
+		display_decimal(display_bottom, 199-count);
+		HAL_Delay(50);
+	}
+	
+	while(1)
+	{
+		for(uint8_t j = 0; j < NUM_GROUPS; j++)
+		{
+			/* testing display_seven_segment() */
+			for(uint8_t i = 0; i < 8; i++)
+			{
+				display_seven_segment(j, i);
+				HAL_Delay(150);
+			}
+			HAL_Delay(500);
+			display_seven_segment(j, CLEAR_DISPLAY);
+			HAL_Delay(500);
+			for(uint8_t i = 8; i < 16; i++)
+			{
+				display_seven_segment(j, i);
+				HAL_Delay(150);
+			}
+			display_group(j, 0);
+			HAL_Delay(250);
+		}
 	}
 		
 //	while(1);
@@ -745,14 +769,21 @@ static void run_test_patterns(void)
 		}
 		
 		HAL_Delay(250);
+		
+		for(uint8_t count = 0; count <= 199; count++)
+		{
+			display_decimal(display_top, count);
+			display_decimal(display_bottom, 199 - count);
+			HAL_Delay(100);
+		}
+		
+		HAL_Delay(250);
 	}
 
 	display_led(rocket, LED_ON);
 	
 	animation_cycle_count = 0;
-	
-	
-	
+
 }
 
 #ifdef  USE_FULL_ASSERT

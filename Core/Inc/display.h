@@ -12,6 +12,8 @@
 
 #include <stdint.h>
 
+#define CLEAR_DISPLAY (0xff)
+
 /* enum for passing top/bottom display parameters */
 enum 
 {
@@ -28,5 +30,7 @@ void display_led(uint16_t led, uint8_t value);
 void display_led_toggle(uint16_t led);
 void display_group(uint8_t group, uint8_t value);
 void display_group_toggle(uint8_t group);
+void display_seven_segment(uint8_t digit, uint8_t value);
+void display_decimal(uint8_t display, uint16_t value);
 
 #endif

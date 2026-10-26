@@ -86,3 +86,9 @@ const uint8_t led_group_array[NUM_GROUPS][8] = {
 	{2, bar_top_left, bar_top_right, 0, 0, 0},
 	{2, bar_bot_left, bar_bot_right, 0, 0, 0}
 };
+
+/* define 7-segment display groups (i.e. digits) */
+const uint8_t seven_segment_displays[NUM_DISPLAYS][3] = {
+	{digit_top_right, digit_top_left, one_top},
+	{digit_bot_right,	digit_bot_left,	one_bot}
+};

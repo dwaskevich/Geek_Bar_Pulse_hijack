@@ -29,7 +29,8 @@ extern volatile uint32_t LED_display_buffer[7][2];
 #define PORTA_ANODE_MASK	0x98000000
 #define PORTB_ANODE_MASK	0x01e80000
 
-//const uint32_t arc_top_array[] = {arc_top_1, arc_top_2, arc_top_3, arc_top_4, arc_top_5};
+/* 7-segment display look-up table for converting digits 0-9 (plus hex a-f) to individual segments */
+const uint8_t SSD_LUT[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x67, 0x77, 0x7c, 0x58, 0x5e, 0x79, 0x71};
 
 void display_cathodes_off(void)
 {
@@ -107,4 +108,57 @@ void display_group_toggle(uint8_t group)
 	{
 		display_led_toggle(led_group_array[group][i + 1]);
 	}
+}
+
+void display_seven_segment(uint8_t digit, uint8_t value)
+{
+	if(digit_top_left == digit | digit_top_right == digit | digit_bot_left == digit | digit_bot_right == digit)
+	{
+		if(CLEAR_DISPLAY == value)
+			display_group(digit, 0);
+		else display_group(digit, SSD_LUT[value]);
+	}
+	else if(one_top == digit | one_bot == digit)
+	{
+		if(CLEAR_DISPLAY == value)
+			display_group(digit, 0);
+		else if(value > 0)
+			display_group(digit, 0x03);
+		else display_group(digit, 0);
+	}	
+}
+
+void display_decimal(uint8_t display, uint16_t value)
+{
+	uint16_t tempVal, i = 0;
+	if(display_top == display | display_bottom == display)
+	{	
+		if(value > 199)
+				value = 199;
+		
+		if(0 == value)
+		{
+			display_seven_segment(seven_segment_displays[display][0], value);
+			display_seven_segment(seven_segment_displays[display][1], CLEAR_DISPLAY);
+			display_seven_segment(seven_segment_displays[display][2], CLEAR_DISPLAY);
+		}
+		else
+		{
+			while(0 != value)
+			{
+				tempVal = value%10;
+				display_seven_segment(seven_segment_displays[display][i], tempVal);
+				value = value/10;
+				i++;
+				if(0 == value)
+				{
+					while(i < NUM_DIGITS)
+					{
+						display_seven_segment(seven_segment_displays[display][i], CLEAR_DISPLAY);
+						i++;
+					}
+				}
+			}			
+		}		
+	}	
 }

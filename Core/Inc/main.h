@@ -42,9 +42,6 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* Private defines -----------------------------------------------------------*/
-#define SLIDE_SWITCH_PORT		GPIOA
-#define SLIDE_SWITCH_PIN		GPIO_PIN_7
-
 /* Exported variables prototypes ---------------------------------------------*/
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_ErrorHandler(void);

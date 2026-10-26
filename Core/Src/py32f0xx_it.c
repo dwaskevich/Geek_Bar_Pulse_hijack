@@ -30,6 +30,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "gpio_defines.h"
 #include "py32f0xx_it.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -106,11 +107,24 @@ void TIM16_IRQHandler(void)
   * @brief This function handles EXTI4_15 Interrupt .
 	*
 	*	djjw ... copied from PY32F0xx Firmware Master SDK download (EXTI code example)
+	*					--> handles interrupts from slide switch (PA7)
 	*
   */
 void EXTI4_15_IRQHandler(void)
 {
   HAL_GPIO_EXTI_IRQHandler(SLIDE_SWITCH_PIN);
+}
+
+/**
+  * @brief This function handles EXTI0_1 Interrupt .
+	*
+	*	djjw ... copied from PY32F0xx Firmware Master SDK download (EXTI code example)
+	*					--> handles interrupts from charging port input (PF1)
+	*
+  */
+void EXTI0_1_IRQHandler(void)
+{
+  HAL_GPIO_EXTI_IRQHandler(CHARGE_PIN);
 }
 
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

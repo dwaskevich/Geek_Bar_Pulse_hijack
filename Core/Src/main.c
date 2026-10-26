@@ -58,6 +58,7 @@
 	*				 device startup and add startup_py32F030x8.s and system_py32f0xx.c
 	*				 manually to the project's source group.
 	*		- created an leds.c source file and moved led matrix to the .c file.
+	*			-> conserves flash storage
   *		- updated leds.h to declare the led matrix as extern
   *
   * Update 23-Oct-2026:
@@ -69,10 +70,16 @@
   *		- implemented test code to measure low-power stop current
 	*			-> 75-79 uA
   *		- created enter_low_power() function
-	*		- moved LED mux timer to TIM16 (reserve TIM1 for TB1/TB2 PWM AF):
+	*		- moved LED mux timer to TIM16 (reserve TIM1 for TB1/TB2 PWM AF)
 	*			-> updated py32f0xx_it.c
 	*			-> updated py32f0xx_hal_msp.c
   *
+  * Update 25-Oct-2026:
+  *		- implemented charging port detection and handling
+	*			-> configured charge input (PF1) as falling edge interrupt
+	*			-> serves as wakeup source, disables sleep/stop mode
+  *		- implemented display functions
+  *		- created gpio_defines.h to hold pin configuration info
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -98,6 +105,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "gpio_defines.h"
 #include "display.h"
 #include "leds.h"
 
@@ -107,15 +115,11 @@
 #define BLUE_PIN						GPIO_PIN_2
 #define GREEN_PIN						GPIO_PIN_4
 
-#define CHARGE_PORT					GPIOF
-#define CHARGE_PIN					GPIO_PIN_1
-
-#define NUM_LED_CATHODES		(7)
+#define LED_OFF							(0)
+#define LED_ON							(1)
 
 #define ANIMATION_DELAY			(250)
-#define PATTERN_DELAY				(25)
-
-#define BSRR_RESET_SHIFT		(16)
+#define PATTERN_DELAY				(75)
 
 #define DEBOUNCE_LOCKOUT_MS	(5)
 
@@ -134,13 +138,15 @@ volatile uint32_t LED_display_buffer[7][2] = {0};
 volatile uint8_t  switch_event_pending = 0;   /* slide switch interrupt flag */
 volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 
+_Bool low_power_enable = TRUE; /* global variable to authorize entering low power */
+
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM16_Init(void);
-static void enter_low_power(void);
+static void enter_low_power(_Bool gate);
 
 /**
   * @brief  Main program.
@@ -168,6 +174,16 @@ int main(void)
     APP_ErrorHandler();
   }
 
+#if !DEBUG_DEVELOP
+//	const uint8_t led_group_array[NUM_GROUPS][6] = {
+//								{5, arc_top_1, arc_top_2, arc_top_3, arc_top_4, arc_top_5},
+//								{5, arc_bot_1, arc_bot_2, arc_bot_3, arc_bot_4, arc_bot_5},
+//								{4, cycle_ne, cycle_se, cycle_sw, cycle_nw, 0},
+//								{2, bar_top_left, bar_top_right, 0, 0, 0},
+//								{2, bar_bot_left, bar_bot_right, 0, 0, 0}
+//							};
+#endif
+	
 #if DEBUG_DEVELOP
 //	while(1);
 	
@@ -177,12 +193,88 @@ int main(void)
 //		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);		
 //	}
 	
+//	while(1)
+//	{
+//		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
+//			HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
+//		else
+//			HAL_GPIO_WritePin(GPIOA, RED_PIN, 1);
+//	}
+	
+//	const uint8_t led_group_array[NUM_GROUPS][6] = {
+//								{5, arc_top_1, arc_top_2, arc_top_3, arc_top_4, arc_top_5},
+//								{5, arc_bot_1, arc_bot_2, arc_bot_3, arc_bot_4, arc_bot_5},
+//								{4, cycle_ne, cycle_se, cycle_sw, cycle_nw, 0},
+//								{2, bar_top_left, bar_top_right, 0, 0, 0},
+//								{2, bar_bot_left, bar_bot_right, 0, 0, 0}
+//							};
+
+//display_all();
+for(uint8_t i = 0; i < NUM_GROUPS; i++)
+{
+	display_group_toggle(i);
+	HAL_Delay(500);
+}
+
+HAL_Delay(2000);
+
+for(uint8_t i = 0; i < NUM_GROUPS; i++)
+{
+	display_group_toggle(i);
+	HAL_Delay(500);
+}
+
+HAL_Delay(5000);
+
+while(1)
+{
+	display_led_toggle(rocket);
+	
+	for(uint8_t i = 0; i < led_group_array[arc_bottom][0]; i++)
+	{
+		display_led_toggle(led_group_array[arc_bottom][i + 1]);
+	}
+	
+	for(uint8_t i = 0; i < led_group_array[arc_top][0]; i++)
+	{
+		display_led_toggle(led_group_array[arc_top][i + 1]);
+	}
+	
+	HAL_Delay(500);
+}
+	
 	while(1)
 	{
-		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
-			HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-		else
-			HAL_GPIO_WritePin(GPIOA, RED_PIN, 1);
+//		display_led(rocket, LED_ON);
+//		HAL_Delay(500);
+//		display_led(rocket, LED_OFF);
+//		HAL_Delay(500);
+		
+		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		{
+			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
+			{
+				display_led(led_group_array[i][j + 1], LED_ON);
+				
+				HAL_Delay(200);
+			}
+			HAL_Delay(500);
+		}
+		
+		HAL_Delay(1000);
+		
+		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		{			
+			for(uint8_t j = 0; j < led_group_array[NUM_GROUPS - 1 - i][0]; j++)
+			{
+				display_led(led_group_array[NUM_GROUPS - 1 - i][led_group_array[NUM_GROUPS - 1 - i][0] - 1 - j + 1], LED_OFF);
+				
+				HAL_Delay(200);
+			}
+			HAL_Delay(500);
+		}
+		
+		HAL_Delay(500);
 	}
 	
 #endif
@@ -190,21 +282,25 @@ int main(void)
   while(1)
 	{
 		uint32_t last_processed_time = 0;
-		static int16_t animation_cycle_count = 3;
+		static int16_t animation_cycle_count = 2;
+		
+		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
+		HAL_GPIO_WritePin(GPIOA, GREEN_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
+		low_power_enable = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
 		/* --- Deferred Interrupt Processing Area --- */
-    if (switch_event_pending) 
+    if(switch_event_pending) 
     {
       switch_event_pending = 0; /* clear pending flag */
       
       /* check the timestamp captured by ISR */
-      if ((switch_event_timestamp - last_processed_time) >= DEBOUNCE_LOCKOUT_MS)
+      if((switch_event_timestamp - last_processed_time) >= DEBOUNCE_LOCKOUT_MS)
       {
         /* debounce lockout window expired ... switch closure validated */
         last_processed_time = switch_event_timestamp;
         
         /* read slide switch pin */
-        if (HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == GPIO_PIN_RESET)
+        if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == GPIO_PIN_RESET)
         {
           /* falling edge ... slide switch moved to "close", prepare for low-power stop */
           HAL_GPIO_TogglePin(GPIOA, RED_PIN);
@@ -220,9 +316,9 @@ int main(void)
 					HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
 					HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
 					
-					enter_low_power();
+					enter_low_power(low_power_enable);
 					
-					animation_cycle_count = 3; /* reset run-mode animation loop count */
+					animation_cycle_count = 2; /* reset run-mode animation loop count */
         }
         else /* rising edge - slide switch moved to "pulse" */
         {
@@ -247,71 +343,74 @@ int main(void)
 			HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
 			HAL_Delay(ANIMATION_DELAY);
 			
-			/* testing led array ...
-					-> illminate individual display element one at a time */
+			/* testing led array ... */			
+			display_clear(); /* clear display */
+			
+			HAL_Delay(250);
+			
+			/* illuminate each display elements and leave trail */
 			for(uint8_t i = 0; i < MAX_LEDS; i++)
 			{
-				/* write display element bit to BSSR low (set) word to illuminate selected display element
-						-> NOTE - this is destructive to all other display elements associated with this scan line,
-											to preserve other display elements use |= (see "leave trail" loop below) */
-				LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA;
-				LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB;
-
-				/* hold display element illumination for a pre-defined delay */
-				HAL_Delay(PATTERN_DELAY);
-				
-				/* remove display element bit from BSRR low (set) word */
-				LED_display_buffer[LED_port_position[i].scan_line][0] &= ~LED_port_position[i].set_segment_GPIOA;
-				LED_display_buffer[LED_port_position[i].scan_line][1] &= ~LED_port_position[i].set_segment_GPIOB;
-
-				/* add display element bit to BSRR high (reset) word to extinguish display element */
-				LED_display_buffer[LED_port_position[i].scan_line][0] = LED_port_position[i].set_segment_GPIOA << BSRR_RESET_SHIFT;
-				LED_display_buffer[LED_port_position[i].scan_line][1] = LED_port_position[i].set_segment_GPIOB << BSRR_RESET_SHIFT;
-			}
-			
-			/* clear display buffer */
-			for(uint8_t i = 0; i < NUM_LED_CATHODES; i++)
-			{
-				LED_display_buffer[i][0] = 0;
-				LED_display_buffer[i][1] = 0;
-			}
-			
-			HAL_Delay(500);
-			
-			/* leave trail of display elements (i.e. OR new bit selection with previous value) */
-			for(uint8_t i = 0; i < MAX_LEDS; i++)
-			{
-				LED_display_buffer[LED_port_position[i].scan_line][0] |= LED_port_position[i].set_segment_GPIOA;
-				LED_display_buffer[LED_port_position[i].scan_line][1] |= LED_port_position[i].set_segment_GPIOB;
+				display_led(i, LED_ON);
 
 				HAL_Delay(PATTERN_DELAY);
 			}
 			
-			HAL_Delay(500);		
+			HAL_Delay(250);		
 			
 			/* pick up trail of display elements (in reverse order) */
 			for(uint8_t i = 0; i < MAX_LEDS; i++)
 			{
-				/* remove display element bit from BSRR low (set) word */
-				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA;
-				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] &= ~LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB;
-				
-				/* add display element bit to BSRR high (reset) word */	
-				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][0] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOA << BSRR_RESET_SHIFT;
-				LED_display_buffer[LED_port_position[MAX_LEDS - 1 - i].scan_line][1] |= LED_port_position[MAX_LEDS - 1 - i].set_segment_GPIOB << BSRR_RESET_SHIFT;
+				display_led(MAX_LEDS - 1 - i, LED_OFF);
 				
 				HAL_Delay(PATTERN_DELAY);
 			}
 			
+			/* flash display */
+			HAL_Delay(250);			
+			for(uint8_t i = 0; i < 3; i++)
+			{
+				display_all();
+				HAL_Delay(250);
+				display_clear();
+				HAL_Delay(250);
+			}
 			HAL_Delay(500);
 			
+			/* testing groups ... leave trail */
+			for(uint8_t i = 0; i < NUM_GROUPS; i++)
+			{
+				for(uint8_t j = 0; j < led_group_array[i][0]; j++)
+				{
+					display_led(led_group_array[i][j + 1], LED_ON);
+					
+					HAL_Delay(200);
+				}
+				HAL_Delay(500);
+			}
+			
+			HAL_Delay(1000);
+			
+			/* testing groups ... pick up trail (in reverse order) */
+			for(uint8_t i = 0; i < NUM_GROUPS; i++)
+			{			
+				for(uint8_t j = 0; j < led_group_array[NUM_GROUPS - 1 - i][0]; j++)
+				{
+					display_led(led_group_array[NUM_GROUPS - 1 - i][led_group_array[NUM_GROUPS - 1 - i][0] - 1 - j + 1], LED_OFF);
+					
+					HAL_Delay(200);
+				}
+				HAL_Delay(500);
+			}
+			
+			HAL_Delay(500);
 		}
+
+		display_led(rocket, LED_ON);
 		
 		animation_cycle_count = 0;
-		
-		LED_display_buffer[LED_port_position[rocket].scan_line][0] = LED_port_position[rocket].set_segment_GPIOA;
-		LED_display_buffer[LED_port_position[rocket].scan_line][1] = LED_port_position[rocket].set_segment_GPIOB;
 	}
+	
 }
 
 /**
@@ -394,11 +493,9 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(SLIDE_SWITCH_PORT, &GPIO_InitStruct);
 	
-	/* Enable EXTI interrupt */
+	/* Enable EXTI interrupt and configure interrupt priority */
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
-	
-  /* Configure interrupt priority */
-  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
 	
 	/* initialize GPIO Port B LED pins as outputs */
 	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
@@ -408,12 +505,16 @@ static void GPIO_Init(void)
 	
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 	
-	/* initialize GPIO Port F charge pin as input */
+	/* initialize GPIO Port F charge pin as falling edge exti input */
 	GPIO_InitStruct.Pin = CHARGE_PIN;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	
 	HAL_GPIO_Init(CHARGE_PORT, &GPIO_InitStruct);
+	
+	/* Enable EXTI interrupt and configure interrupt priority */
+  HAL_NVIC_EnableIRQ(EXTI0_1_IRQn);
+  HAL_NVIC_SetPriority(EXTI0_1_IRQn, 0, 0);
 	
 	/* initialize GPIO Port F LED pin as output */
 	GPIO_InitStruct.Pin = GPIO_PIN_2;
@@ -518,16 +619,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @param  GPIO_Pin
   * @retval None
 	*
-	*	djjw ... Slide Switch interrupt callback. Captures timestamp and sets flag.
+	*	djjw ... GPIO wakeup sources
+	*				-->	slide switch interrupt captures timestamp and sets
+	*						flag (for main loop debounce)
+	*				-->	charge input interrupt wakes from sleep/stop and 
+	*						turns on the display
 	*
   */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if (GPIO_Pin == SLIDE_SWITCH_PIN)
+  if(GPIO_Pin == SLIDE_SWITCH_PIN)
   {
-    /* Capture timestamp, set switch event flag */
+    /* Capture timestamp, set switch event flag ... debounce in main loop */
     switch_event_timestamp = HAL_GetTick();
     switch_event_pending = 1;
+	}
+	if(GPIO_Pin == CHARGE_PIN)
+  {
+    display_all(); /* TODO - replace with a scheduled task to animate the charging arc */
+									 /* Note - charging arc animation task should check charge input */
 	}
 }
 
@@ -546,63 +656,66 @@ void APP_ErrorHandler(void)
 
 /**
   * @brief  Low power stop mode
-  * @param  None
+  * @param  _Bool value to enable or disable low-power mode
   * @retval None
 	*
 	*	djjw ... prepares system for and enters low power stop.
 	*
   */
-void enter_low_power(void)
+void enter_low_power(_Bool gate)
 {
-	display_cathodes_off(); /* turn off all display cathodes */
+	if(TRUE == gate)
+	{
+		display_cathodes_off(); /* turn off all display cathodes */
+			
+		/* put GPIO in low-power state (analog is best choice to avoid leakage current) */
+		GPIO_InitTypeDef GPIO_InitStruct = {0};	
 		
-	/* put GPIO in low-power state (analog is best choice to avoid leakage current) */
-	GPIO_InitTypeDef GPIO_InitStruct = {0};	
-	
-	/* GPIOA */
-	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
-	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	
-	/* GPIOB */
-	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
-	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+		/* GPIOA */
+		GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+		GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+		
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+		
+		/* GPIOB */
+		GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
+		GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+		
+		HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-	/* stop TIM1 timer and suspend SysTick */
-	HAL_TIM_Base_Stop_IT(&htim16);
-	HAL_SuspendTick();
-	
-	/* Enter STOP mode with interrupt wakeup */
-	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
-	
-	/* exit from stop ... reconfigure clocks and gpio, restart timer and SysTick */
-	APP_SystemClockConfig();
-	
-	/* return GPIO Port A LED pins to outputs */
-	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-	
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	
-	/* return GPIO Port B LED pins to outputs */
-	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-	
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-	
-	HAL_ResumeTick();
-	HAL_TIM_Base_Start_IT(&htim16);
+		/* stop TIM1 timer and suspend SysTick */
+		HAL_TIM_Base_Stop_IT(&htim16);
+		HAL_SuspendTick();
+		
+		/* Enter STOP mode with interrupt wakeup */
+		HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+		
+		/* exit from stop ... reconfigure clocks and gpio, restart timer and SysTick */
+		APP_SystemClockConfig();
+		
+		/* return GPIO Port A LED pins to outputs */
+		GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+		GPIO_InitStruct.Pull = GPIO_PULLUP;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+		
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+		
+		/* return GPIO Port B LED pins to outputs */
+		GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
+		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+		GPIO_InitStruct.Pull = GPIO_PULLUP;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+		
+		HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+		
+		HAL_ResumeTick();
+		HAL_TIM_Base_Start_IT(&htim16);
+	}
 }
 
 #ifdef  USE_FULL_ASSERT

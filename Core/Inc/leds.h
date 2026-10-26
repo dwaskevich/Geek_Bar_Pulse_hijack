@@ -12,6 +12,8 @@
 
 #include <stdint.h>
 
+#define NUM_LED_CATHODES		(7)
+
 /* enum to identify and define individual LEDs (from top to bottom) ... 53 in total */
 enum 
 {
@@ -71,6 +73,17 @@ enum
 	MAX_LEDS
 };
 
+/* enum to define LED groups */
+enum 
+{
+	arc_top,
+	arc_bottom,
+	cycle,
+	bar_top,
+	bar_bottom,
+	NUM_GROUPS
+};
+
 typedef struct
 {
 	uint8_t  scan_line;
@@ -79,5 +92,6 @@ typedef struct
 } LED_port_position_t;
 
 extern const LED_port_position_t LED_port_position[MAX_LEDS];
+extern const uint8_t led_group_array[NUM_GROUPS][6];
 
 #endif

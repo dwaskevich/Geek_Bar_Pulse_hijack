@@ -86,6 +86,8 @@
 	*			-> display_seven_segment() ... individual digit
 	*			-> display_decimal() ... upper or lower 2.1 digit display
 	*			-> display_hex() ... upper or lower 2.1 digit display
+  *		- enabled ADC to measure battery voltage
+  *		- added inactivity timer to enter stop mode after 20 seconds
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -203,64 +205,6 @@ int main(void)
 #endif
 	
 #if DEBUG_DEVELOP
-	
-	uint32_t                      adc_value;
-	uint16_t                      T_VCC;
-	
-	display_clear(); 
-	
-	while (1)
-  {
-    /* Start ADC */
-    HAL_ADC_Start(&hadc);
-
-    /* Waiting for ADC conversion completed */
-    HAL_ADC_PollForConversion(&hadc, 1000000);  
-
-    /* Get ADC value */
-    adc_value = HAL_ADC_GetValue(&hadc); 
-    
-    /* Calculate VCC voltage */
-    T_VCC = (4095 * 1200) / adc_value;
-		display_decimal(display_top, T_VCC / 100);
-		display_decimal(display_bottom, T_VCC % 100);
-//    printf("VCC : %d mV\r\n", T_VCC);
-    HAL_Delay(500);
-  }
-	
-	
-	
-	uint16_t count = 0;
-	while(1)
-	{
-		display_hex(display_top, count);
-		display_hex(display_bottom, 0x1ff - count);
-		count = (count + 1) % 0x1ff;
-		HAL_Delay(750);
-	}
-	
-	while(1)
-	{
-		for(uint8_t j = 0; j < NUM_GROUPS; j++)
-		{
-			/* testing display_seven_segment() */
-			for(uint8_t i = 0; i < 8; i++)
-			{
-				display_seven_segment(j, i);
-				HAL_Delay(150);
-			}
-			HAL_Delay(500);
-			display_seven_segment(j, CLEAR_DISPLAY);
-			HAL_Delay(500);
-			for(uint8_t i = 8; i < 16; i++)
-			{
-				display_seven_segment(j, i);
-				HAL_Delay(150);
-			}
-			display_group(j, 0);
-			HAL_Delay(250);
-		}
-	}
 		
 //	while(1);
 	
@@ -289,19 +233,6 @@ int main(void)
         if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == GPIO_PIN_RESET)
         {
           /* falling edge ... slide switch moved to "close", prepare for low-power stop */
-//          HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//					HAL_Delay(50);
-//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//					HAL_Delay(50);
-//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//					HAL_Delay(50);
-//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//					HAL_Delay(50);
-//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//					HAL_Delay(50);
-//					HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-//					HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
-					
 					enter_low_power(low_power_enable);
 					
 					animation_cycle_count = 2; /* reset run-mode animation loop count */
@@ -337,11 +268,7 @@ int main(void)
 			enter_low_power(low_power_enable);
 			inactivity_timestamp = HAL_GetTick();
 		}
-		
-//		display_decimal(display_top, HAL_GetTick() / 1000);
-//		display_decimal(display_bottom, (HAL_GetTick() - inactivity_timestamp) / 1000);
-	}
-	
+	}	
 }
 
 /**

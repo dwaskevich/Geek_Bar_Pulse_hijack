@@ -139,6 +139,10 @@ TIM_HandleTypeDef		htim16 = {0};
 /* Handle for the TIM14 Timer ... will be used for 10 second inactivity timer */
 TIM_HandleTypeDef		htim14 = {0};
 
+/* Handle for the ADC */
+ADC_HandleTypeDef hadc = {0};
+ADC_ChannelConfTypeDef sConfig = {0};
+
 /* LED display 7-anode array (note - anodes span GPIO Port A and B) */
 volatile uint32_t LED_display_buffer[7][2] = {0};
 
@@ -149,12 +153,18 @@ static int16_t animation_cycle_count = 2;
 
 _Bool low_power_enable = TRUE; /* global variable to authorize entering low power */
 
+uint32_t adc_value;
+uint16_t T_VCC;
+
+uint32_t inactivity_timestamp;
+
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM16_Init(void);
+static void ADC_Init(void);
 static void enter_low_power(_Bool gate);
 static void run_test_patterns(void);
 
@@ -178,6 +188,9 @@ int main(void)
 	/* djjw - initialize TIM16 timer (LED mux) */
 	TIM16_Init();
 	
+	/* djjw - initialize ADC for Vcc (i.e. battery measurement) */
+  ADC_Init();
+	
 	/* Start the TIM1 Base generation in interrupt mode */
   if (HAL_TIM_Base_Start_IT(&htim16) != HAL_OK)
   {
@@ -185,16 +198,38 @@ int main(void)
   }
 
 #if !DEBUG_DEVELOP
-//	const uint8_t led_group_array[NUM_GROUPS][6] = {
-//								{5, arc_top_1, arc_top_2, arc_top_3, arc_top_4, arc_top_5},
-//								{5, arc_bot_1, arc_bot_2, arc_bot_3, arc_bot_4, arc_bot_5},
-//								{4, cycle_ne, cycle_se, cycle_sw, cycle_nw, 0},
-//								{2, bar_top_left, bar_top_right, 0, 0, 0},
-//								{2, bar_bot_left, bar_bot_right, 0, 0, 0}
-//							};
+
+	
 #endif
 	
 #if DEBUG_DEVELOP
+	
+	uint32_t                      adc_value;
+	uint16_t                      T_VCC;
+	
+	display_clear(); 
+	
+	while (1)
+  {
+    /* Start ADC */
+    HAL_ADC_Start(&hadc);
+
+    /* Waiting for ADC conversion completed */
+    HAL_ADC_PollForConversion(&hadc, 1000000);  
+
+    /* Get ADC value */
+    adc_value = HAL_ADC_GetValue(&hadc); 
+    
+    /* Calculate VCC voltage */
+    T_VCC = (4095 * 1200) / adc_value;
+		display_decimal(display_top, T_VCC / 100);
+		display_decimal(display_bottom, T_VCC % 100);
+//    printf("VCC : %d mV\r\n", T_VCC);
+    HAL_Delay(500);
+  }
+	
+	
+	
 	uint16_t count = 0;
 	while(1)
 	{
@@ -229,102 +264,11 @@ int main(void)
 		
 //	while(1);
 	
-//	while(1)
-//	{
-//		/* read charging indicator ... illuninate BLUE LEDs if charging is active */
-//		HAL_GPIO_WritePin(GPIOA, BLUE_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);		
-//	}
-	
-//	while(1)
-//	{
-//		if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == 0)
-//			HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-//		else
-//			HAL_GPIO_WritePin(GPIOA, RED_PIN, 1);
-//	}
-	
-//	const uint8_t led_group_array[NUM_GROUPS][6] = {
-//								{5, arc_top_1, arc_top_2, arc_top_3, arc_top_4, arc_top_5},
-//								{5, arc_bot_1, arc_bot_2, arc_bot_3, arc_bot_4, arc_bot_5},
-//								{4, cycle_ne, cycle_se, cycle_sw, cycle_nw, 0},
-//								{2, bar_top_left, bar_top_right, 0, 0, 0},
-//								{2, bar_bot_left, bar_bot_right, 0, 0, 0}
-//							};
-
-//display_all();
-for(uint8_t i = 0; i < NUM_GROUPS; i++)
-{
-	display_group_toggle(i);
-	HAL_Delay(500);
-}
-
-HAL_Delay(2000);
-
-for(uint8_t i = 0; i < NUM_GROUPS; i++)
-{
-	display_group_toggle(i);
-	HAL_Delay(500);
-}
-
-HAL_Delay(5000);
-
-while(1)
-{
-	display_led_toggle(rocket);
-	
-	for(uint8_t i = 0; i < led_group_array[arc_bottom][0]; i++)
-	{
-		display_led_toggle(led_group_array[arc_bottom][i + 1]);
-	}
-	
-	for(uint8_t i = 0; i < led_group_array[arc_top][0]; i++)
-	{
-		display_led_toggle(led_group_array[arc_top][i + 1]);
-	}
-	
-	HAL_Delay(500);
-}
-	
-	while(1)
-	{
-//		display_led(rocket, LED_ON);
-//		HAL_Delay(500);
-//		display_led(rocket, LED_OFF);
-//		HAL_Delay(500);
-		
-		for(uint8_t i = 0; i < NUM_GROUPS; i++)
-		{
-			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
-			{
-				display_led(led_group_array[i][j + 1], LED_ON);
-				
-				HAL_Delay(200);
-			}
-			HAL_Delay(500);
-		}
-		
-		HAL_Delay(1000);
-		
-		for(uint8_t i = 0; i < NUM_GROUPS; i++)
-		{			
-			for(uint8_t j = 0; j < led_group_array[NUM_GROUPS - 1 - i][0]; j++)
-			{
-				display_led(led_group_array[NUM_GROUPS - 1 - i][led_group_array[NUM_GROUPS - 1 - i][0] - 1 - j + 1], LED_OFF);
-				
-				HAL_Delay(200);
-			}
-			HAL_Delay(500);
-		}
-		
-		HAL_Delay(500);
-	}
-	
 #endif
 
   while(1)
 	{
 		uint32_t last_processed_time = 0;
-//		static int16_t animation_cycle_count = 2;
 		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
 		HAL_GPIO_WritePin(GPIOA, GREEN_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
@@ -345,18 +289,18 @@ while(1)
         if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == GPIO_PIN_RESET)
         {
           /* falling edge ... slide switch moved to "close", prepare for low-power stop */
-          HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-					HAL_Delay(50);
-					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-					HAL_Delay(50);
-					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-					HAL_Delay(50);
-					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-					HAL_Delay(50);
-					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-					HAL_Delay(50);
-					HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-					HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
+//          HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//					HAL_Delay(50);
+//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//					HAL_Delay(50);
+//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//					HAL_Delay(50);
+//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//					HAL_Delay(50);
+//					HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//					HAL_Delay(50);
+//					HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
+//					HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
 					
 					enter_low_power(low_power_enable);
 					
@@ -370,6 +314,32 @@ while(1)
 		}
 		
 		run_test_patterns();
+		
+		HAL_Delay(1000);
+		
+		/* Start ADC */
+    HAL_ADC_Start(&hadc);
+
+    /* Waiting for ADC conversion completed */
+    HAL_ADC_PollForConversion(&hadc, 1000000);  
+
+    /* Get ADC value */
+    adc_value = HAL_ADC_GetValue(&hadc); 
+    
+    /* Calculate VCC voltage */
+    T_VCC = (4095 * 1200) / adc_value;
+		display_decimal(display_top, T_VCC / 100);
+		display_decimal(display_bottom, T_VCC % 100);
+    HAL_Delay(500);
+		
+		if(HAL_GetTick() > inactivity_timestamp + 20000)
+		{
+			enter_low_power(low_power_enable);
+			inactivity_timestamp = HAL_GetTick();
+		}
+		
+//		display_decimal(display_top, HAL_GetTick() / 1000);
+//		display_decimal(display_bottom, (HAL_GetTick() - inactivity_timestamp) / 1000);
 	}
 	
 }
@@ -512,6 +482,58 @@ static void TIM16_Init(void)
 }
 
 /**
+  * @brief  ADC configuration function
+  * @param  None
+  * @retval None
+	*
+	*	djjw ... copied from PUYA SDK example
+	*
+  */
+static void ADC_Init(void)
+{
+  __HAL_RCC_ADC_FORCE_RESET();
+  __HAL_RCC_ADC_RELEASE_RESET();                                         /* Reset ADC */
+  __HAL_RCC_ADC_CLK_ENABLE();                                            /* Enable ADC clock */
+  
+  hadc.Instance = ADC1;
+
+  /* ADC calibration */
+  if (HAL_ADCEx_Calibration_Start(&hadc) != HAL_OK)                 
+  {
+    APP_ErrorHandler();
+  }
+  
+  hadc.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;              /* Set ADC clock */
+  hadc.Init.Resolution = ADC_RESOLUTION_12B;                        /* 12-bit resolution for converted data */
+  hadc.Init.DataAlign = ADC_DATAALIGN_RIGHT;                        /* Right-alignment for converted data */
+  hadc.Init.ScanConvMode = ADC_SCAN_DIRECTION_FORWARD;              /* Scan sequence direction: forward */
+  hadc.Init.EOCSelection = ADC_EOC_SINGLE_CONV;                     /* Single sampling */
+  hadc.Init.LowPowerAutoWait = ENABLE;                              /* Enable wait for conversion mode*/
+  hadc.Init.ContinuousConvMode = DISABLE;                           /* Single conversion mode */
+  hadc.Init.DiscontinuousConvMode = DISABLE;                        /* Disable discontinuous mode */
+  hadc.Init.ExternalTrigConv = ADC_SOFTWARE_START;                  /* Software triggering */
+  hadc.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;   /* No external trigger edge */
+  hadc.Init.DMAContinuousRequests = DISABLE;                        /* Disable DMA */
+  hadc.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;                     /* When an overload occurs, overwrite the previous value  */
+  hadc.Init.SamplingTimeCommon = ADC_SAMPLETIME_239CYCLES_5;        /* Set sampling time */
+
+  /* ADC initialization */
+  if (HAL_ADC_Init(&hadc) != HAL_OK)                                
+  {
+    APP_ErrorHandler();
+  }
+
+  sConfig.Channel = ADC_CHANNEL_VREFINT;                                 /* ADC channel selection */
+  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;                                /* Set the rank for the ADC channel order */
+ 
+  /* Configure ADC channels */
+  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)            
+  {
+    APP_ErrorHandler();
+  }
+}
+
+/**
   * @brief  Period elapsed callback in non blocking mode
   * @param  htim:TIM handle
   * @retval None
@@ -625,6 +647,19 @@ void APP_ErrorHandler(void)
   */
 void enter_low_power(_Bool gate)
 {
+	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	HAL_Delay(50);
+	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	HAL_Delay(50);
+	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	HAL_Delay(50);
+	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	HAL_Delay(50);
+	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	HAL_Delay(50);
+	HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
+	HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
+	
 	if(TRUE == gate)
 	{
 		display_cathodes_off(); /* turn off all display cathodes */
@@ -785,12 +820,13 @@ static void run_test_patterns(void)
 		}
 		
 		HAL_Delay(250);
+		
+		inactivity_timestamp = HAL_GetTick();
 	}
 
 	display_led(rocket, LED_ON);
 	
 	animation_cycle_count = 0;
-
 }
 
 #ifdef  USE_FULL_ASSERT

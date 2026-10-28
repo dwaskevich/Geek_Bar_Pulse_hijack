@@ -39,19 +39,32 @@ Description: Reverse engineering and repurposing of Geek Bar Pulse assets (MCU, 
 - NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface is normally unavailable. Slide switch wakes unit and provides small connect window. Can also plug in charger to wake uinit and open another connect window/opportunity.
 - See schematic for feature element mapping (i.e. RGB LEDs, display, etc)
 	- https://github.com/schlae/VapeRE/tree/main/BD0027
-- Perimeter RGB LEDs:
+- Perimeter RGB LEDs (16 tri-color smt LEDs, each color driven by FET):
 	- Red - PA5
 	- Green - PA4
 	- Blue - PA2
-- Charge indicator - PF1
+- Charging indicator from LP4068 Li-Ion controller - PF1
+- Charge current programming output - PF0
 - Slide switch - PA7 (pulls low in one position, high in remaining two)
 - LED matrix (53 display elements/LEDs)
+	- 7 x 8 matrix
 	- Refer to leds.h for mapping
+- MOSFET coil drives
+	- TB1 - PA1, Sense input PA6
+	- TB2 - PA0, Sense input PA3
+- Microphone (puff sensor) input - PF3
 
 ## Peripheral setup:
-- LED matrix timer - TIM1 (auto-reload mode, 1.6 ms interrupt)
-- Application time-out timer - TIM2 (oneshot mode, 10s interrupt)
+- LED matrix timer - TIM16 (auto-reload mode, 1.6 ms interrupt)
 - Low power timer - LPTIM (? interrupt)
+- RGB LED PWM:
+	- Red   (PA5) TIM3_CH2 (AF13)
+	- Green (PA4) TIM3_CH3 (AF13)
+	- Blue  (PA2) TIM3_CH1 (AF13)
+- TB1/TB2 PWM (MOSFET coil drives):
+	- TB1 (PA1) TIM1_CH4 (AF13)
+	- TB2 (PA0) TIM1_CH3 (AF13)
+- Program/Debug - SWD ... PA13 (SWDIO)/PA14 (SWDCK)
 - UART - USART1 ... re-purpose SWD via AF registers:
 	- Rx = PA13 (AF8), Tx = PA14 (AF1)
 

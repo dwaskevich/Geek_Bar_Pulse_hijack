@@ -22,31 +22,45 @@
   * IDE:         Keil MDK-ARM v5.43a uVision 5
   *
   * Wiring:      SWD interface exposed on USB-C charging port (CC1/CC2)
-	*							 SWDIO - PA13, SWCLK - PA14
-  *              NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface
-  *                 is normally unavailable. Slide switch wakes unit and provides
-	*									small connect window. Can also plug in charger to wake uinit.
+	*							   -> SWDIO - PA13, SWCLK - PA14
+  *                -> NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface
+  *                    is normally unavailable. Slide switch wakes unit and provides
+	*								     small connect window. Can also plug in charger to wake unit.
   *              See schematic for feature element mapping (i.e. RGB LEDs, display, etc)
-	*									-> https://github.com/schlae/VapeRE/tree/main/BD0027
-  *              Charge indicator - PF1
+	*							   -> https://github.com/schlae/VapeRE/tree/main/BD0027
+  *              Charging indicator from LP4068 Li-Ion controller - PF1
+  *              Charge current programming output - PF0
   *              Slide switch - PA7 (pulls low in one position, high in remaining two)
+  *              RGB LED ring (16 tri-color smt LEDs)
+  *							  -> Red PA5, Green PA4, Blue PA2
+  *							  -> note - each color driven by FET
+  *              MOSFET coil drives:
+  *							  -> TB1 - PA1, Sense input PA6
+  *							  -> TB2 - PA0, Sense input PA3
+  *              Microphone (puff sensor) input:
+  *							  -> PF3
   *
   * Peripheral setup:
   *              UART - USART1 ... re-purpose SWD via AF registers:
 	*									-> Rx = PA13 (AF8), Tx = PA14 (AF1)
-  *              LED matrix timer - TIM1 (auto-reload mode, 1.6 ms interrupt)
-  *              Application time-out timer - TIM2 (oneshot mode, 10s interrupt)
+  *              LED matrix timer - TIM16 (auto-reload mode, 1.6 ms interrupt)
   *              Low power timer - LPTIM (? interrupt)
-  *              Hardware-based delay - TIM4 (.5 us count)
-  *              I2C1 - future use (CapSense buttons)
+  *              RGB PWM:
+  *							  - Red   (PA5) TIM3_CH2 (AF13)
+  *							  - Green (PA4) TIM3_CH3 (AF13)
+  *							  - Blue  (PA2) TIM3_CH1 (AF13)
+  *              TB1/TB2 PWM (MOSFET coil drives):
+  *							  - TB1 (PA1) TIM1_CH4 (AF13)
+  *							  - TB2 (PA0) TIM1_CH3 (AF13)
   *              Program/Debug - SWD ... PA13 (SWDIO)/PA14 (SWDCK)
   *
   *
-  * Usage:       #include display.h, leds.h
+  * Usage:       #include display.h, leds.h, gpio_defines.h
   *              NOTE - 
   *
   * Update 26-Sept-2026:
-  *		- added LED mapping (leds.h)
+  *		- added LED mapping for 53 multiplexed LEDs ... 7 x 8 matrix (leds.h)
+  *		- muxing controlled by TIM16 PeriodElapsedCallback
 	*		- verified mapping with test animation
   *
   * Update 22-Oct-2026:
@@ -57,20 +71,20 @@
 	*				 causes compile to fail. Had to use RTE to uncheck the automatic
 	*				 device startup and add startup_py32F030x8.s and system_py32f0xx.c
 	*				 manually to the project's source group.
-	*		- created an leds.c source file and moved led matrix to the .c file.
-	*			-> conserves flash storage
+	*		- created leds.c source file and moved led matrix to the .c file to
+	*			   conserve flash storage
   *		- updated leds.h to declare the led matrix as extern
   *
   * Update 23-Oct-2026:
   *		- removed reset_segment from LED_port_position structure, replaced with
-	*			simple left shift of set_segment value (<< BSRR_RESET_SHIFT (16))
+	*			  simple left shift of set_segment value (<< BSRR_RESET_SHIFT (16))
 	*		- first pass slide switch gpio configuration (exti wakeup source)
   *
   * Update 24-Oct-2026:
   *		- implemented test code to measure low-power stop current
 	*			-> 75-79 uA
   *		- created enter_low_power() function
-	*		- moved LED mux timer to TIM16 (reserve TIM1 for TB1/TB2 PWM AF)
+	*		- moved LED mux timer to TIM16 (reserve TIM1 for TB1/TB2 PWM)
 	*			-> updated py32f0xx_it.c
 	*			-> updated py32f0xx_hal_msp.c
   *
@@ -78,16 +92,26 @@
   *		- implemented charging port detection and handling
 	*			-> configured charge input (PF1) as falling edge interrupt
 	*			-> serves as wakeup source, disables sleep/stop mode
-  *		- implemented display functions
+  *		- implemented low-level display functions
   *		- created gpio_defines.h to hold pin configuration info
   *
   * Update 26-Oct-2026:
-  *		- implemented 7-segment display functions
-	*			-> display_seven_segment() ... individual digit
-	*			-> display_decimal() ... upper or lower 2.1 digit display
-	*			-> display_hex() ... upper or lower 2.1 digit display
+  *		- implemented high-level 7-segment display functions
+	*			-> display_seven_segment() ... wrties to an individual digit
+	*			-> display_decimal() ... writes decimal value to upper or lower
+	*			    2.1 digit display
+	*			-> display_hex() ... writes hex value to upper or lower 2.1
+	*			    digit display
   *		- enabled ADC to measure battery voltage
+	*			-> updated py32f0xx_hal_conf.h to enable ADC HAL APIs
+	*			-> value displayed as millivolts (2 most significant digits
+	*			    displayed on upper display, 2 least significant on lower)
   *		- added inactivity timer to enter stop mode after 20 seconds
+  *
+  * Update 27-Oct-2026:
+  *		- added a clear_display function to clear all 2.1 digits of 7-seg displays
+  *		- created 23 vertical slices to facilitate screen fade-out
+	*			-> added to led_group_array[]
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -137,9 +161,6 @@
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM16 Timer ... will be used for display muxing */
 TIM_HandleTypeDef		htim16 = {0};
-
-/* Handle for the TIM14 Timer ... will be used for 10 second inactivity timer */
-TIM_HandleTypeDef		htim14 = {0};
 
 /* Handle for the ADC */
 ADC_HandleTypeDef hadc = {0};
@@ -206,7 +227,30 @@ int main(void)
 	
 #if DEBUG_DEVELOP
 		
-//	while(1);
+	while(1)
+	{
+		display_decimal(display_top, 199);
+		display_decimal(display_bottom, 128);
+		
+		HAL_Delay(1000);
+		
+		display_clear_display(display_top);
+		display_clear_display(display_bottom);
+		
+		HAL_Delay(5000);
+	}
+	
+	while(1)
+	{
+		display_all();
+		HAL_Delay(1500);
+		for(uint8_t i = wipe_1; i <= wipe_23; i++)
+		{
+			display_group(i, 0);
+			HAL_Delay(100);			
+		}
+		HAL_Delay(1000);
+	}
 	
 #endif
 
@@ -589,6 +633,14 @@ void enter_low_power(_Bool gate)
 	
 	if(TRUE == gate)
 	{
+		display_all();
+		
+		for(uint8_t i = slice_1; i <= slice_23; i++)
+		{
+			display_group(i, 0);
+			HAL_Delay(100);			
+		}		
+		
 		display_cathodes_off(); /* turn off all display cathodes */
 			
 		/* put GPIO in low-power state (analog is best choice to avoid leakage current) */
@@ -694,7 +746,7 @@ static void run_test_patterns(void)
 		HAL_Delay(250);
 		
 		/* testing groups ... leave trail */
-		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		for(uint8_t i = one_top; i <= bar_bottom; i++)
 		{
 			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
 			{
@@ -708,11 +760,11 @@ static void run_test_patterns(void)
 		HAL_Delay(250);
 		
 		/* testing groups ... pick up trail (in reverse order) */
-		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		for(uint8_t i = one_top; i <= bar_bottom; i++)
 		{			
-			for(uint8_t j = 0; j < led_group_array[NUM_GROUPS - 1 - i][0]; j++)
+			for(uint8_t j = 0; j < led_group_array[bar_bottom - i][0]; j++)
 			{
-				display_led(led_group_array[NUM_GROUPS - 1 - i][led_group_array[NUM_GROUPS - 1 - i][0] - 1 - j + 1], LED_OFF);
+				display_led(led_group_array[bar_bottom - i][led_group_array[bar_bottom - i][0] - 1 - j + 1], LED_OFF);
 				
 				HAL_Delay(PATTERN_DELAY);
 			}
@@ -722,7 +774,7 @@ static void run_test_patterns(void)
 		HAL_Delay(250);
 		
 		/* testing groups with display_group() */
-		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		for(uint8_t i = one_top; i <= bar_bottom; i++)
 		{
 			display_group(i, 0xff);
 			HAL_Delay(GROUP_DELAY);
@@ -731,9 +783,9 @@ static void run_test_patterns(void)
 		HAL_Delay(250);
 		
 		/* testing groups with display_group() */
-		for(uint8_t i = 0; i < NUM_GROUPS; i++)
+		for(uint8_t i = one_top; i <= bar_bottom; i++)
 		{			
-			display_group(NUM_GROUPS - 1 - i, 0x00);
+			display_group(bar_bottom - i, 0x00);
 			HAL_Delay(GROUP_DELAY);
 		}
 		

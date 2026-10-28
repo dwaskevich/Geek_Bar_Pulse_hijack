@@ -198,3 +198,13 @@ void display_hex(uint8_t display, uint16_t value)
 		}		
 	}	
 }
+
+void display_clear_display(uint8_t display)
+{
+	if(display_top == display | display_bottom == display)
+	{
+		display_seven_segment(seven_segment_displays[display][0], CLEAR_DISPLAY);
+		display_seven_segment(seven_segment_displays[display][1], CLEAR_DISPLAY);
+		display_seven_segment(seven_segment_displays[display][2], CLEAR_DISPLAY);
+	}	
+}

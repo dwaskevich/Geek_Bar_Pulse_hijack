@@ -84,7 +84,30 @@ const uint8_t led_group_array[NUM_GROUPS][8] = {
 	{5, arc_bot_1, arc_bot_2, arc_bot_3, arc_bot_4, arc_bot_5},
 	{4, cycle_ne, cycle_se, cycle_sw, cycle_nw, 0},
 	{2, bar_top_left, bar_top_right, 0, 0, 0},
-	{2, bar_bot_left, bar_bot_right, 0, 0, 0}
+	{2, bar_bot_left, bar_bot_right, 0, 0, 0},
+	{1, arc_top_3, 0, 0, 0, 0, 0, 0},
+	{2, arc_top_2, arc_top_4, 0, 0, 0, 0, 0},
+	{2, arc_top_1, arc_top_5, 0, 0, 0, 0, 0},
+	{1, lightning_bolt, 0, 0, 0, 0, 0, 0},
+	{2, digit_top_left_a, digit_top_right_a, 0, 0, 0, 0, 0},
+	{5, one_top_upper, digit_top_left_b, digit_top_left_f, digit_top_right_b, digit_top_right_f, 0, 0},
+	{2, digit_top_left_g, digit_top_right_g, 0, 0, 0, 0, 0},
+	{5, one_top_lower, digit_top_left_c, digit_top_left_e, digit_top_right_c, digit_top_right_e, 0, 0},
+	{2, digit_top_left_d, digit_top_right_d, 0, 0, 0, 0, 0},
+	{2, bar_top_left, bar_top_right, 0, 0, 0, 0, 0},
+	{2, cycle_nw, cycle_ne, 0, 0, 0, 0, 0},
+	{1, rocket, 0, 0, 0, 0, 0, 0},
+	{2, cycle_sw, cycle_se, 0, 0, 0, 0, 0},
+	{2, bar_bot_left, bar_bot_right, 0, 0, 0, 0, 0},
+	{2, digit_bot_left_a, digit_bot_right_a, 0, 0, 0, 0, 0},
+	{5, one_bot_upper, digit_bot_left_b, digit_bot_left_f, digit_bot_right_b, digit_bot_right_f, 0, 0},
+	{2, digit_bot_left_g, digit_bot_right_g, 0, 0, 0, 0, 0},
+	{5, one_bot_lower, digit_bot_left_c, digit_bot_left_e, digit_bot_right_c, digit_bot_right_e, 0, 0},
+	{2, digit_bot_left_d, digit_bot_right_d, 0, 0, 0, 0, 0},
+	{1, tear_drop, 0, 0, 0, 0, 0, 0},
+	{2, arc_bot_1, arc_bot_5, 0, 0, 0, 0, 0},
+	{2, arc_bot_2, arc_bot_4, 0, 0, 0, 0, 0},
+	{1, arc_bot_3, 0, 0, 0, 0, 0, 0}
 };
 
 /* define 7-segment display groups (i.e. digits) */

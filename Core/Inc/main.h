@@ -43,6 +43,7 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* Private defines -----------------------------------------------------------*/
 /* Exported variables prototypes ---------------------------------------------*/
+extern ADC_HandleTypeDef hadc;
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_ErrorHandler(void);
 

@@ -112,6 +112,16 @@
   *		- added a clear_display function to clear all 2.1 digits of 7-seg displays
   *		- created 23 vertical slices to facilitate screen fade-out
 	*			-> added to led_group_array[]
+  *
+  * Update 28-Oct-2026:
+  *		- improved ADC Vrefint measurement:
+	*			-> first order IIR low pass filter to smooth reading (1/16 weight)
+	*			-> 101-point fixed lookup table/array to convert voltage to percent
+	*			-> empirical results on open unit: DMM = 3.89v, firmware = 3.884
+  *		- added display_group_fill() to fill a group based on the value passed
+  *
+  * Update 29-Oct-2026:
+  *		- moved battery status to .c/.h files
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -140,6 +150,7 @@
 #include "gpio_defines.h"
 #include "display.h"
 #include "leds.h"
+#include "battery.h"
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
@@ -159,6 +170,9 @@
 #define DEBUG_DEVELOP				0
 
 /* Private variables ---------------------------------------------------------*/
+/* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
+TIM_HandleTypeDef		htim3 = {0};
+
 /* Handle for the TIM16 Timer ... will be used for display muxing */
 TIM_HandleTypeDef		htim16 = {0};
 
@@ -175,9 +189,6 @@ volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 static int16_t animation_cycle_count = 2;
 
 _Bool low_power_enable = TRUE; /* global variable to authorize entering low power */
-
-uint32_t adc_value;
-uint16_t T_VCC;
 
 uint32_t inactivity_timestamp;
 
@@ -211,7 +222,7 @@ int main(void)
 	/* djjw - initialize TIM16 timer (LED mux) */
 	TIM16_Init();
 	
-	/* djjw - initialize ADC for Vcc (i.e. battery measurement) */
+	/* djjw - initialize ADC for ADC_CHANNEL_VREFINT measurement (to calculate battery voltage) */
   ADC_Init();
 	
 	/* Start the TIM1 Base generation in interrupt mode */
@@ -244,7 +255,7 @@ int main(void)
 	{
 		display_all();
 		HAL_Delay(1500);
-		for(uint8_t i = wipe_1; i <= wipe_23; i++)
+		for(uint8_t i = slice_1; i <= slice_23; i++)
 		{
 			display_group(i, 0);
 			HAL_Delay(100);			
@@ -257,6 +268,7 @@ int main(void)
   while(1)
 	{
 		uint32_t last_processed_time = 0;
+		battery_status_t battery_status;
 		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
 		HAL_GPIO_WritePin(GPIOA, GREEN_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
@@ -288,26 +300,21 @@ int main(void)
       }			
 		}
 		
-		run_test_patterns();
+//		run_test_patterns();
 		
 		HAL_Delay(1000);
 		
-		/* Start ADC */
-    HAL_ADC_Start(&hadc);
-
-    /* Waiting for ADC conversion completed */
-    HAL_ADC_PollForConversion(&hadc, 1000000);  
-
-    /* Get ADC value */
-    adc_value = HAL_ADC_GetValue(&hadc); 
-    
-    /* Calculate VCC voltage */
-    T_VCC = (4095 * 1200) / adc_value;
-		display_decimal(display_top, T_VCC / 100);
-		display_decimal(display_bottom, T_VCC % 100);
-    HAL_Delay(500);
+		/* get battery status and update display */
+		battery_status = battery_get_status();
+		display_decimal(display_top, battery_status.percent);		
+		display_group_fill(arc_top, battery_status.bars);
+		display_decimal(display_bottom, battery_status.millivolts / 100);
+		HAL_Delay(400);
+		display_decimal(display_bottom, battery_status.millivolts % 100);
 		
-		if(HAL_GetTick() > inactivity_timestamp + 20000)
+    HAL_Delay(800);
+		
+		if(HAL_GetTick() > inactivity_timestamp + 60000)
 		{
 			enter_low_power(low_power_enable);
 			inactivity_timestamp = HAL_GetTick();

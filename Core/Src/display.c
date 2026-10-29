@@ -110,6 +110,17 @@ void display_group_toggle(uint8_t group)
 	}
 }
 
+void display_group_fill(uint8_t group, uint8_t value)
+{
+	if(value > led_group_array[group][NUM_ELEMENTS])
+		value = led_group_array[group][NUM_ELEMENTS];
+	
+	for(uint8_t i = 0; i < value; i++)
+	{
+		display_led(led_group_array[group][i + 1], 1);
+	}
+}
+
 void display_seven_segment(uint8_t digit, uint8_t value)
 {
 	if(digit_top_left == digit | digit_top_right == digit | digit_bot_left == digit | digit_bot_right == digit)

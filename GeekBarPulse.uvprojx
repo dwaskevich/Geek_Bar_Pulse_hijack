@@ -419,6 +419,11 @@
               <FileType>1</FileType>
               <FilePath>.\Core\Src\leds.c</FilePath>
             </File>
+            <File>
+              <FileName>battery.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\Src\battery.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -583,6 +588,11 @@
               <FileName>gpio_defines.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Core\Inc\gpio_defines.h</FilePath>
+            </File>
+            <File>
+              <FileName>battery.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\battery.h</FilePath>
             </File>
           </Files>
         </Group>

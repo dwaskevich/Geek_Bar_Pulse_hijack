@@ -14,14 +14,6 @@
 
 #define CLEAR_DISPLAY (0xff)
 
-/* enum for passing top/bottom display parameters */
-enum 
-{
-	TOP = 0,
-	BOTTOM
-};
-
-
 void display_cathodes_off(void);
 void display_anodes_off(void);
 void display_clear(void);

@@ -183,10 +183,10 @@ ADC_ChannelConfTypeDef sConfig = {0};
 /* LED display 7-anode array (note - anodes span GPIO Port A and B) */
 volatile uint32_t LED_display_buffer[7][2] = {0};
 
-volatile uint8_t  switch_event_pending = 0;   /* slide switch interrupt flag */
+volatile _Bool  switch_event_pending = 0;   /* slide switch interrupt flag */
 volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 
-static int16_t animation_cycle_count = 2;
+static int16_t animation_cycle_count = 1;
 
 _Bool low_power_enable = TRUE; /* global variable to authorize entering low power */
 
@@ -238,18 +238,18 @@ int main(void)
 	
 #if DEBUG_DEVELOP
 		
-	while(1)
-	{
-		display_decimal(display_top, 199);
-		display_decimal(display_bottom, 128);
-		
-		HAL_Delay(1000);
-		
-		display_clear_display(display_top);
-		display_clear_display(display_bottom);
-		
-		HAL_Delay(5000);
-	}
+//	while(1)
+//	{
+//		display_decimal(display_top, 199);
+//		display_decimal(display_bottom, 128);
+//		
+//		HAL_Delay(1000);
+//		
+//		display_clear_display(display_top);
+//		display_clear_display(display_bottom);
+//		
+//		HAL_Delay(5000);
+//	}
 	
 	while(1)
 	{
@@ -267,7 +267,7 @@ int main(void)
 
   while(1)
 	{
-		uint32_t last_processed_time = 0;
+		uint32_t main_loop_time_marker = 0, last_processed_time = 0;
 		battery_status_t battery_status;
 		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
@@ -282,7 +282,7 @@ int main(void)
       /* check the timestamp captured by ISR */
       if((switch_event_timestamp - last_processed_time) >= DEBOUNCE_LOCKOUT_MS)
       {
-        /* debounce lockout window expired ... switch closure validated */
+        /* debounce lockout window expired ... switch closure validated, reset last_processed_time */
         last_processed_time = switch_event_timestamp;
         
         /* read slide switch pin */
@@ -291,7 +291,7 @@ int main(void)
           /* falling edge ... slide switch moved to "close", prepare for low-power stop */
 					enter_low_power(low_power_enable);
 					
-					animation_cycle_count = 2; /* reset run-mode animation loop count */
+					animation_cycle_count = 1; /* reset run-mode animation loop count */
         }
         else /* rising edge - slide switch moved to "pulse" */
         {
@@ -300,21 +300,28 @@ int main(void)
       }			
 		}
 		
-//		run_test_patterns();
+		run_test_patterns();
 		
-		HAL_Delay(1000);
+		if(HAL_GetTick() - main_loop_time_marker > 1000)
+		{		
+			/* get battery status and update display */
+			battery_status = battery_get_status();
+			display_decimal(display_top, battery_status.percent);		
+			display_group_fill(arc_top, battery_status.bars);
+			display_decimal(display_bottom, battery_status.millivolts / 100);
+			HAL_Delay(1000);
+			if(battery_status.millivolts % 100 < 10)
+			{
+				display_seven_segment(digit_bot_left, 0);
+				display_seven_segment(digit_bot_right, battery_status.millivolts % 100);
+			}
+			else
+				display_decimal(display_bottom, battery_status.millivolts % 100);
+			HAL_Delay(500);
+			main_loop_time_marker = HAL_GetTick();
+		}
 		
-		/* get battery status and update display */
-		battery_status = battery_get_status();
-		display_decimal(display_top, battery_status.percent);		
-		display_group_fill(arc_top, battery_status.bars);
-		display_decimal(display_bottom, battery_status.millivolts / 100);
-		HAL_Delay(400);
-		display_decimal(display_bottom, battery_status.millivolts % 100);
-		
-    HAL_Delay(800);
-		
-		if(HAL_GetTick() > inactivity_timestamp + 60000)
+		if(HAL_GetTick() > inactivity_timestamp + 30000)
 		{
 			enter_low_power(low_power_enable);
 			inactivity_timestamp = HAL_GetTick();
@@ -697,6 +704,8 @@ void enter_low_power(_Bool gate)
 		
 		HAL_ResumeTick();
 		HAL_TIM_Base_Start_IT(&htim16);
+		
+		animation_cycle_count = 1;
 	}
 }
 

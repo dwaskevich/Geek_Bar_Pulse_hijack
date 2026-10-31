@@ -57,13 +57,48 @@ void HAL_MspInit(void)
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
 {
 	(void) htim;
-  /* Enable TIM16 clock */
-  __HAL_RCC_TIM16_CLK_ENABLE();
-  
-  /* Set interrupt priority */
-  HAL_NVIC_SetPriority(TIM16_IRQn, 0, 0);
-  /* Enable TIM1 interrupt */
-  HAL_NVIC_EnableIRQ(TIM16_IRQn);
+	
+	/* Enable TIM16 clock */
+	__HAL_RCC_TIM16_CLK_ENABLE();
+	
+	/* Set interrupt priority */
+	HAL_NVIC_SetPriority(TIM16_IRQn, 0, 0);
+	/* Enable TIM1 interrupt */
+	HAL_NVIC_EnableIRQ(TIM16_IRQn);
+}
+
+/**
+  * @brief Initialize TIM-related MSP
+	*
+	*	djjw ... copied from PY32F0xx Firmware Master SDK download (TIM1 PWM code example)
+	*
+  */
+void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
+{
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	
+	(void) htim;
+	
+	/* Enable TIM3 clock */
+	__HAL_RCC_TIM3_CLK_ENABLE();
+ 
+	GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;        /* Alternate function mode */
+	GPIO_InitStruct.Pull = GPIO_NOPULL;            /* No Pull-up */
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	/*Initialize GPIO PA2 (Channel 1) - Blue */
+	GPIO_InitStruct.Pin = BLUE_PIN;
+	GPIO_InitStruct.Alternate = GPIO_AF13_TIM3;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	/*Initialize GPIO PA4 (Channel 3) - Green */
+	GPIO_InitStruct.Pin = GREEN_PIN;
+	GPIO_InitStruct.Alternate = GPIO_AF13_TIM3;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	/*Initialize GPIO PA5 (Channel 2) - Red */
+	GPIO_InitStruct.Pin = RED_PIN;
+	GPIO_InitStruct.Alternate = GPIO_AF13_TIM3;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	
 }
 
 /************************ (C) COPYRIGHT Puya *****END OF FILE******************/

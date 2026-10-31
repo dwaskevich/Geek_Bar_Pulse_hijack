@@ -25,8 +25,13 @@ Description: Reverse engineering and repurposing of Geek Bar Pulse assets (MCU, 
 - Debug probes:
 	- Segger J-Link Plus + Segger J-Link Commander v9.78, J-Flash v9.78
 		- Closely integrated with Keil uVision (works reliably for programming and debug)
-		- J-Flash seemed to be most reliable tool for erasing chip
-		- J-Link Commander (command line) also used to attempt capture of the core on a sealed unit
+		- VTRef voltage of target inaccessible on sealed unit:
+			- PY32f030EK28 runs directly from battery which varies from ~3.3-4.2
+			- Either connect an external 3.3V supply to VTRef or use J-Link Commander:
+				- Syntax - VTREF <Value[mV]>
+					- Set fixed value for VTref on J-Link (0 == Auto detection).
+					- Value[mV]	Value, VTref is supposed to be set to in millivolt.
+				- Example --> VTREF 3300
 	- ST-Linkv2 (not tested or used)
 	- RP2040 Pi Pico (debugprobe_on_pico.uf2) + OpenOCD
 		- https://github.com/raspberrypi/debugprobe/releases
@@ -34,9 +39,15 @@ Description: Reverse engineering and repurposing of Geek Bar Pulse assets (MCU, 
 	
 
 ## Wiring:
+![J-Link Setup](JLink_setup_1.jpg)
+![J-Link Setup](JLink_setup_2.jpg)
 - SWD interface exposed on USB-C charging port (CC1/CC2)
-- SWDIO - PA13, SWCLK - PA14
-- NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface is normally unavailable. Slide switch wakes unit and provides small connect window. Can also plug in charger to wake uinit and open another connect window/opportunity.
+	- USB Type-C breakout board provides debugger access:
+	- SWDIO - PA13, SWCLK - PA14 (A5 / B5 on breakout)
+		- https://a.co/d/
+		- ![USB-C Breakout](USB_Type-C_full_breakout_board.jpg)
+	- USB-C is reversible so A5 / B5 can be swapped to match SWD lines
+- NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface is normally unavailable. Slide switch wakes unit and provides small connect window. Can also plug in charger to wake unit and open another connect window/opportunity.
 - See schematic for feature element mapping (i.e. RGB LEDs, display, etc)
 	- https://github.com/schlae/VapeRE/tree/main/BD0027
 - Perimeter RGB LEDs (16 tri-color smt LEDs, each color driven by FET):

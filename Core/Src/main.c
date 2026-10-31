@@ -122,6 +122,15 @@
   *
   * Update 29-Oct-2026:
   *		- moved battery status to .c/.h files
+  *
+  * Update 30-Oct-2026:
+  *		- set up RGB PWM:
+	*			-> moved RGB pin #defines to main.h (for access in py32f00xx_hal_msp.c)
+	*			-> using TIM3, Channels 1, 2, 3 ... gpio mapped via AF13
+	*			-> TIM3_Init() in main.c
+	*				-> includes base timer as well as TIM_OC_InitTypeDef PWM-specific config
+	*			-> HAL_TIM_PWM_MspInit() in py32f0xx_hal_msp.c
+	*				-> handles TIM3 clock enable and alternate function gpio config
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -154,9 +163,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
-#define RED_PIN							GPIO_PIN_5
-#define BLUE_PIN						GPIO_PIN_2
-#define GREEN_PIN						GPIO_PIN_4
 
 #define LED_OFF							(0)
 #define LED_ON							(1)
@@ -169,9 +175,13 @@
 
 #define DEBUG_DEVELOP				0
 
+#define SET_RED_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, x))
+#define SET_GREEN_COMPARE(x)  (__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, x))
+#define SET_BLUE_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, x))
+
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
-TIM_HandleTypeDef		htim3 = {0};
+TIM_HandleTypeDef htim3 = {0};
 
 /* Handle for the TIM16 Timer ... will be used for display muxing */
 TIM_HandleTypeDef		htim16 = {0};
@@ -198,6 +208,7 @@ uint32_t inactivity_timestamp;
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM16_Init(void);
+static void TIM3_Init(void);
 static void ADC_Init(void);
 static void enter_low_power(_Bool gate);
 static void run_test_patterns(void);
@@ -222,6 +233,9 @@ int main(void)
 	/* djjw - initialize TIM16 timer (LED mux) */
 	TIM16_Init();
 	
+	/* djjw - initialize TIM3 timer (RGB PWM) */
+	TIM3_Init();
+	
 	/* djjw - initialize ADC for ADC_CHANNEL_VREFINT measurement (to calculate battery voltage) */
   ADC_Init();
 	
@@ -237,19 +251,106 @@ int main(void)
 #endif
 	
 #if DEBUG_DEVELOP
+	
+//	display_all();
+//	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+//	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 1023);
+//	
+//	while(1);
+	
+	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+	
+	while(1)
+	{
+		display_all();
 		
-//	while(1)
-//	{
-//		display_decimal(display_top, 199);
-//		display_decimal(display_bottom, 128);
-//		
+		for(uint8_t i = slice_1; i <= slice_23; i++)
+		{
+			display_group(i, 0);
+			SET_GREEN_COMPARE(700 - (30 * (i - slice_1)));
+			HAL_Delay(100);
+		}
+		
+		SET_GREEN_COMPARE(0);
+		
+		HAL_Delay(750);
+		
+		display_all();
+		
+		for(uint8_t i = slice_1; i <= slice_23; i++)
+		{
+			display_group(i, 0);
+			SET_GREEN_COMPARE(600 - (25 * (i - slice_1)));
+			HAL_Delay(100);
+		}
+		
+		SET_GREEN_COMPARE(0);
+		
+		HAL_Delay(750);
+		
+		
+		display_all();
+		
+		for(uint8_t i = slice_1; i <= slice_23; i++)
+		{
+			display_group(i, 0);
+			SET_GREEN_COMPARE(500 - (20 * (i - slice_1)));
+			HAL_Delay(100);
+		}
+		
+		SET_GREEN_COMPARE(0);
+		
+		HAL_Delay(750);
+		
+	}
+	
+	/* Basic hex file */
+	while(1)
+	{
+		display_led_toggle(rocket);
+		HAL_Delay(1000);		
+	}
+	
+	display_decimal(display_top, HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL));
+	display_decimal(display_bottom, HAL_TIM_PWM_Start(&htim3, RED_CHANNEL));
+//	__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 1023);
+	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+	
+	while(1)
+	{
+		for(uint16_t i = 0; i < 1024; i += 4)
+		{
+			__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, 1023 - i);
+			__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, i);
+			HAL_Delay(1);
+		}
 //		HAL_Delay(1000);
-//		
-//		display_clear_display(display_top);
-//		display_clear_display(display_bottom);
-//		
-//		HAL_Delay(5000);
-//	}
+//		for(uint16_t i = 0; i < 1024; i++)
+//		{
+//			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 1023 - i);
+//			HAL_Delay(1);
+//		}
+		HAL_Delay(2000);
+		for(uint16_t i = 0; i < 1024; i += 4)
+		{
+			__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, i);
+			HAL_Delay(1);
+		}
+		HAL_Delay(1000);
+	}
+		
+	while(1)
+	{
+		display_decimal(display_top, 199);
+		display_decimal(display_bottom, 128);
+		
+		HAL_Delay(1000);
+		
+		display_clear_display(display_top);
+		display_clear_display(display_bottom);
+		
+		HAL_Delay(5000);
+	}
 	
 	while(1)
 	{
@@ -271,7 +372,16 @@ int main(void)
 		battery_status_t battery_status;
 		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
-		HAL_GPIO_WritePin(GPIOA, GREEN_PIN, HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) ? 0 : 1);
+		if(HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) == 0)
+		{
+			SET_GREEN_COMPARE(1023);
+			HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+		}
+		else
+		{
+			SET_GREEN_COMPARE(0);
+			HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
+		}
 		low_power_enable = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
 		/* --- Deferred Interrupt Processing Area --- */
@@ -295,7 +405,9 @@ int main(void)
         }
         else /* rising edge - slide switch moved to "pulse" */
         {
-          HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 1);
+//          HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 1);
+					SET_GREEN_COMPARE(1023);
+					HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
         }
       }			
 		}
@@ -308,8 +420,12 @@ int main(void)
 			battery_status = battery_get_status();
 			display_decimal(display_top, battery_status.percent);		
 			display_group_fill(arc_top, battery_status.bars);
+			display_led(bar_bot_right, 0);
+			display_led(bar_bot_left, 1);
 			display_decimal(display_bottom, battery_status.millivolts / 100);
 			HAL_Delay(1000);
+			display_led(bar_bot_left, 0);
+			display_led(bar_bot_right, 1);
 			if(battery_status.millivolts % 100 < 10)
 			{
 				display_seven_segment(digit_bot_left, 0);
@@ -380,7 +496,9 @@ static void APP_SystemClockConfig(void)
   * @retval None
 	*
 	*	djjw ... mapping Geek Bar Pulse PCB to GPIOs
-	*				-> (https://github.com/schlae/VapeRE/tree/main/BD0027)
+	*				-> (https://github.com/schlae/VapeRE/tree/main/BD0027
+	*
+	*	copied from PUYA SDK example
 	*
   */
 static void GPIO_Init(void)
@@ -394,7 +512,7 @@ static void GPIO_Init(void)
 	GPIO_InitTypeDef GPIO_InitStruct = {0};	
 	
 	/* initialize GPIO Port A LED pins as outputs */
-	GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+	GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
@@ -448,6 +566,8 @@ static void GPIO_Init(void)
 	*
 	*	djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz
 	*
+	*	copied from PUYA SDK example
+	*
   */
 static void TIM16_Init(void)
 {	
@@ -464,6 +584,59 @@ static void TIM16_Init(void)
   {
     APP_ErrorHandler();
   }
+}
+
+/**
+  * @brief  TIM3 Config
+  * @param  None
+  * @retval None
+	*
+	*	djjw ... PWM control for RGB LEDs (1kHz frequency, 10-bit resolution)
+	*
+	*	copied from PUYA SDK example
+	*
+  */
+static void TIM3_Init(void)
+{
+	TIM_OC_InitTypeDef sConfig;
+	
+	htim3.Instance = TIM3;																					/* Select TIM3 */
+  htim3.Init.Period            = 1024 - 1;												/* Auto-reload value */
+  htim3.Init.Prescaler         = 24 - 1;													/* Prescaler of 800-1 */
+  htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;					/* No clock division */
+  htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;							/* Up counting */
+  htim3.Init.RepetitionCounter = 1 - 1;														/* No repetition counting */
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;	/* Auto-reload register not buffered */
+	
+  /* Initialize timer base */
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+  
+  sConfig.OCMode       = TIM_OCMODE_PWM1;							/* Configure as PWM1 output */
+  sConfig.OCPolarity   = TIM_OCPOLARITY_HIGH;					/* OC channel output is active high level */
+  sConfig.OCFastMode   = TIM_OCFAST_DISABLE;					/* Fast output mode is disabled */
+  sConfig.OCNPolarity  = TIM_OCNPOLARITY_HIGH;				/* OCN channel output is active high level */
+  sConfig.OCNIdleState = TIM_OCNIDLESTATE_RESET;			/* OC1N output is low in idle state */
+  sConfig.OCIdleState  = TIM_OCIDLESTATE_RESET;				/* OC1 output is low in idle state */
+	sConfig.Pulse				 = 0;														/* initial value */
+	
+	if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfig, TIM_CHANNEL_1) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+	
+	if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfig, TIM_CHANNEL_2) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+	
+	if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfig, TIM_CHANNEL_3) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+	
 }
 
 /**
@@ -525,6 +698,8 @@ static void ADC_Init(void)
 	*
 	*	djjw ... LED display mux ISR (600Hz refresh rate)
 	*
+	*	copied from PUYA SDK example
+	*
 	*	Notes on HAL interrupt plumbing:
 	*		- hardware interrupt vector table is mapped in startup_py32f030x8.s
 	*		- handler must be placed in py32f0xx_it.c
@@ -533,7 +708,6 @@ static void ADC_Init(void)
 	*		- py32f0xx_hal_tim.c has a weak definition of the callback:
 	*			-> __weak void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	*		- HAL_TIM_PeriodElapsedCallback definition here overrides weak definition
-	*			in SDK source file
 	*
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -632,19 +806,42 @@ void APP_ErrorHandler(void)
   */
 void enter_low_power(_Bool gate)
 {
-	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-	HAL_Delay(50);
-	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-	HAL_Delay(50);
-	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-	HAL_Delay(50);
-	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-	HAL_Delay(50);
-	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-	HAL_Delay(50);
-	HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-	HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
+//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//	HAL_Delay(50);
+//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//	HAL_Delay(50);
+//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//	HAL_Delay(50);
+//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//	HAL_Delay(50);
+//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//	HAL_Delay(50);
+//	HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
+//	HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
 	
+	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
+	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+	HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
+	
+//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	SET_RED_COMPARE(1023);
+	HAL_Delay(ANIMATION_DELAY);
+//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+	SET_BLUE_COMPARE(1023);
+	HAL_Delay(ANIMATION_DELAY);
+//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+	SET_GREEN_COMPARE(1023);
+	HAL_Delay(ANIMATION_DELAY);
+//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+	SET_RED_COMPARE(0);
+	HAL_Delay(ANIMATION_DELAY);
+//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+	SET_BLUE_COMPARE(0);
+	HAL_Delay(ANIMATION_DELAY);
+//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+	SET_GREEN_COMPARE(0);
+//	HAL_Delay(ANIMATION_DELAY);
+		
 	if(TRUE == gate)
 	{
 		display_all();
@@ -652,8 +849,16 @@ void enter_low_power(_Bool gate)
 		for(uint8_t i = slice_1; i <= slice_23; i++)
 		{
 			display_group(i, 0);
+			SET_GREEN_COMPARE(700 - (30 * (i - slice_1)));
 			HAL_Delay(100);			
-		}		
+		}
+		
+		SET_GREEN_COMPARE(0);
+		
+		HAL_TIM_PWM_Stop(&htim3, RED_CHANNEL);
+		HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
+		HAL_TIM_PWM_Stop(&htim3, BLUE_CHANNEL);
+		__HAL_RCC_TIM3_CLK_DISABLE();
 		
 		display_cathodes_off(); /* turn off all display cathodes */
 			
@@ -687,7 +892,7 @@ void enter_low_power(_Bool gate)
 		APP_SystemClockConfig();
 		
 		/* return GPIO Port A LED pins to outputs */
-		GPIO_InitStruct.Pin = RED_PIN | BLUE_PIN | GREEN_PIN | GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+		GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
 		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 		GPIO_InitStruct.Pull = GPIO_PULLUP;
 		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
@@ -702,6 +907,26 @@ void enter_low_power(_Bool gate)
 		
 		HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 		
+		/* Enable TIM3 clock */
+		__HAL_RCC_TIM3_CLK_ENABLE();
+	 
+		GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;        /* Alternate function mode */
+		GPIO_InitStruct.Pull = GPIO_NOPULL;            /* No Pull-up */
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+		
+		/*Initialize GPIO PA2 (Channel 1) - Blue */
+		GPIO_InitStruct.Pin = BLUE_PIN;
+		GPIO_InitStruct.Alternate = GPIO_AF13_TIM3;
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+		/*Initialize GPIO PA4 (Channel 3) - Green */
+		GPIO_InitStruct.Pin = GREEN_PIN;
+		GPIO_InitStruct.Alternate = GPIO_AF13_TIM3;
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+		/*Initialize GPIO PA5 (Channel 2) - Red */
+		GPIO_InitStruct.Pin = RED_PIN;
+		GPIO_InitStruct.Alternate = GPIO_AF13_TIM3;
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+		
 		HAL_ResumeTick();
 		HAL_TIM_Base_Start_IT(&htim16);
 		
@@ -714,23 +939,40 @@ static void run_test_patterns(void)
 	for(uint8_t i = 0; i < animation_cycle_count; i++)
 	{
 		/* animate peripheral RGB LEDs */
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
+		HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+		HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
+		
+//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		SET_RED_COMPARE(1023);
 		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+		SET_BLUE_COMPARE(1023);
 		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+		SET_GREEN_COMPARE(1023);
 		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
+		SET_RED_COMPARE(0);
 		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
+		SET_BLUE_COMPARE(0);
 		HAL_Delay(ANIMATION_DELAY);
-		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
+		SET_GREEN_COMPARE(0);
 		HAL_Delay(ANIMATION_DELAY);
+		
+//		HAL_TIM_PWM_Stop(&htim3, RED_CHANNEL);
+//		HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
+//		HAL_TIM_PWM_Stop(&htim3, BLUE_CHANNEL);
+		
 		
 		/* testing led array ... */			
 		display_clear(); /* clear display */
 		
 		HAL_Delay(250);
+		
+		SET_RED_COMPARE(1023);
 		
 		/* illuminate each display elements and leave trail */
 		for(uint8_t i = 0; i < MAX_LEDS; i++)
@@ -750,8 +992,12 @@ static void run_test_patterns(void)
 			HAL_Delay(PATTERN_DELAY);
 		}
 		
+		SET_RED_COMPARE(0);
+		
 		/* flash display */
-		HAL_Delay(250);			
+		HAL_Delay(250);
+		SET_GREEN_COMPARE(1023);
+		HAL_Delay(250);
 		for(uint8_t i = 0; i < 3; i++)
 		{
 			display_all();
@@ -807,12 +1053,18 @@ static void run_test_patterns(void)
 		
 		HAL_Delay(250);
 		
+		SET_GREEN_COMPARE(0);
+//		SET_BLUE_COMPARE(1023);
+		
 		for(uint8_t count = 0; count <= 199; count++)
 		{
+			SET_BLUE_COMPARE(count * 5);
 			display_decimal(display_top, count);
 			display_decimal(display_bottom, 199 - count);
 			HAL_Delay(100);
 		}
+		
+		SET_BLUE_COMPARE(1023);
 		
 		HAL_Delay(250);
 		

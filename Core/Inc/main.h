@@ -42,8 +42,17 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* Private defines -----------------------------------------------------------*/
+#define RED_PIN							GPIO_PIN_5
+#define BLUE_PIN						GPIO_PIN_2
+#define GREEN_PIN						GPIO_PIN_4
+
+#define RED_CHANNEL					TIM_CHANNEL_2
+#define BLUE_CHANNEL				TIM_CHANNEL_1
+#define GREEN_CHANNEL				TIM_CHANNEL_3
+
 /* Exported variables prototypes ---------------------------------------------*/
 extern ADC_HandleTypeDef hadc;
+extern TIM_HandleTypeDef htim3;
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_ErrorHandler(void);
 

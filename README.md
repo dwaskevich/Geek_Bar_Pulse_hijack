@@ -44,7 +44,7 @@ Description: Reverse engineering and repurposing of Geek Bar Pulse assets (MCU, 
 - SWD interface exposed on USB-C charging port (CC1/CC2)
 	- USB Type-C breakout board provides debugger access:
 	- SWDIO - PA13, SWCLK - PA14 (A5 / B5 on breakout)
-		- https://a.co/d/
+		- https://www.amazon.com/clp/B0BWXKV8DB
 		- ![USB-C Breakout](USB_Type-C_full_breakout_board.jpg)
 	- USB-C is reversible so A5 / B5 can be swapped to match SWD lines
 - NOTE -> Normal state of unit is in deep sleep (or stop), SWD interface is normally unavailable. Slide switch wakes unit and provides small connect window. Can also plug in charger to wake unit and open another connect window/opportunity.

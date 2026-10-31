@@ -131,6 +131,8 @@
 	*				-> includes base timer as well as TIM_OC_InitTypeDef PWM-specific config
 	*			-> HAL_TIM_PWM_MspInit() in py32f0xx_hal_msp.c
 	*				-> handles TIM3 clock enable and alternate function gpio config
+  *		- updated demo application to include PWM effects
+  *		- updated readme.md
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -252,116 +254,11 @@ int main(void)
 	
 #if DEBUG_DEVELOP
 	
-//	display_all();
-//	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-//	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 1023);
-//	
-//	while(1);
-	
-	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-	
-	while(1)
-	{
-		display_all();
-		
-		for(uint8_t i = slice_1; i <= slice_23; i++)
-		{
-			display_group(i, 0);
-			SET_GREEN_COMPARE(700 - (30 * (i - slice_1)));
-			HAL_Delay(100);
-		}
-		
-		SET_GREEN_COMPARE(0);
-		
-		HAL_Delay(750);
-		
-		display_all();
-		
-		for(uint8_t i = slice_1; i <= slice_23; i++)
-		{
-			display_group(i, 0);
-			SET_GREEN_COMPARE(600 - (25 * (i - slice_1)));
-			HAL_Delay(100);
-		}
-		
-		SET_GREEN_COMPARE(0);
-		
-		HAL_Delay(750);
-		
-		
-		display_all();
-		
-		for(uint8_t i = slice_1; i <= slice_23; i++)
-		{
-			display_group(i, 0);
-			SET_GREEN_COMPARE(500 - (20 * (i - slice_1)));
-			HAL_Delay(100);
-		}
-		
-		SET_GREEN_COMPARE(0);
-		
-		HAL_Delay(750);
-		
-	}
-	
 	/* Basic hex file */
 	while(1)
 	{
 		display_led_toggle(rocket);
 		HAL_Delay(1000);		
-	}
-	
-	display_decimal(display_top, HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL));
-	display_decimal(display_bottom, HAL_TIM_PWM_Start(&htim3, RED_CHANNEL));
-//	__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 1023);
-	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-	
-	while(1)
-	{
-		for(uint16_t i = 0; i < 1024; i += 4)
-		{
-			__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, 1023 - i);
-			__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, i);
-			HAL_Delay(1);
-		}
-//		HAL_Delay(1000);
-//		for(uint16_t i = 0; i < 1024; i++)
-//		{
-//			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 1023 - i);
-//			HAL_Delay(1);
-//		}
-		HAL_Delay(2000);
-		for(uint16_t i = 0; i < 1024; i += 4)
-		{
-			__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, i);
-			HAL_Delay(1);
-		}
-		HAL_Delay(1000);
-	}
-		
-	while(1)
-	{
-		display_decimal(display_top, 199);
-		display_decimal(display_bottom, 128);
-		
-		HAL_Delay(1000);
-		
-		display_clear_display(display_top);
-		display_clear_display(display_bottom);
-		
-		HAL_Delay(5000);
-	}
-	
-	while(1)
-	{
-		display_all();
-		HAL_Delay(1500);
-		for(uint8_t i = slice_1; i <= slice_23; i++)
-		{
-			display_group(i, 0);
-			HAL_Delay(100);			
-		}
-		HAL_Delay(1000);
 	}
 	
 #endif
@@ -405,7 +302,6 @@ int main(void)
         }
         else /* rising edge - slide switch moved to "pulse" */
         {
-//          HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 1);
 					SET_GREEN_COMPARE(1023);
 					HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
         }
@@ -413,6 +309,8 @@ int main(void)
 		}
 		
 		run_test_patterns();
+		
+		display_led(lightning_bolt, 1);
 		
 		if(HAL_GetTick() - main_loop_time_marker > 1000)
 		{		
@@ -805,42 +703,22 @@ void APP_ErrorHandler(void)
 	*
   */
 void enter_low_power(_Bool gate)
-{
-//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//	HAL_Delay(50);
-//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//	HAL_Delay(50);
-//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//	HAL_Delay(50);
-//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//	HAL_Delay(50);
-//	HAL_GPIO_TogglePin(GPIOA, RED_PIN);
-//	HAL_Delay(50);
-//	HAL_GPIO_WritePin(GPIOA, RED_PIN, 0);
-//	HAL_GPIO_WritePin(GPIOA, BLUE_PIN, 0);
-	
+{	
 	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
 	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
 	HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
 	
-//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
 	SET_RED_COMPARE(1023);
 	HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
 	SET_BLUE_COMPARE(1023);
 	HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
 	SET_GREEN_COMPARE(1023);
 	HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
 	SET_RED_COMPARE(0);
 	HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
 	SET_BLUE_COMPARE(0);
 	HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
 	SET_GREEN_COMPARE(0);
-//	HAL_Delay(ANIMATION_DELAY);
 		
 	if(TRUE == gate)
 	{
@@ -943,29 +821,18 @@ static void run_test_patterns(void)
 		HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
 		HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
 		
-//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
 		SET_RED_COMPARE(1023);
 		HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
 		SET_BLUE_COMPARE(1023);
 		HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
 		SET_GREEN_COMPARE(1023);
 		HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, RED_PIN);
 		SET_RED_COMPARE(0);
 		HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, BLUE_PIN);
 		SET_BLUE_COMPARE(0);
 		HAL_Delay(ANIMATION_DELAY);
-//		HAL_GPIO_TogglePin(GPIOA, GREEN_PIN);
 		SET_GREEN_COMPARE(0);
 		HAL_Delay(ANIMATION_DELAY);
-		
-//		HAL_TIM_PWM_Stop(&htim3, RED_CHANNEL);
-//		HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
-//		HAL_TIM_PWM_Stop(&htim3, BLUE_CHANNEL);
-		
 		
 		/* testing led array ... */			
 		display_clear(); /* clear display */
@@ -1054,7 +921,6 @@ static void run_test_patterns(void)
 		HAL_Delay(250);
 		
 		SET_GREEN_COMPARE(0);
-//		SET_BLUE_COMPARE(1023);
 		
 		for(uint8_t count = 0; count <= 199; count++)
 		{

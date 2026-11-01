@@ -16,18 +16,42 @@ Description: Reverse engineering and repurposing of Geek Bar Pulse assets (MCU, 
 
 
 
-## IDE/SDK:
-- Keil MDK-ARM v5.43a uVision 5
-	- Puya microcontrollers natively supported in latest version
+## SDK/IDE:
 - Puya PY32F0xx_Firmware-master SDK
 	- HAL/LL drivers, code examples, device templates, start-up files
 		- https://github.com/OpenPuya/PY32F0xx_Firmware
+- Keil MDK-ARM v5.43a uVision 5 IDE
+	- Puya microcontrollers natively supported in latest version
+	- Pack Installer selection - PY32F0 Series (Puya::PY32F0x_DFP)
+	- Run Time Environment (RTE) setup:
+		- Select CMSIS Core
+		- Don't select the Device Startup checkbox ... Puya's SDK erroneously loads the PY32F031 startup file along with PY32F030 which causes compiler errors
+		- Manually copy and add the correct startup and system files to project:
+			- PY32F0xx_Firmware-master\Drivers\CMSIS\Device\PY32F0xx\Source\arm\startup_py32f030x8.s
+			- PY32F0xx_Firmware-master\Drivers\CMSIS\Device\PY32F0xx\Source\system_py32f0xx.c
+- PY32F0xx_HAL_Driver folder:
+	- Files copied from downloaded SDK to uVision project directory and added to project
+- Template files added to project folder and project:
+	- PY32F0xx_Firmware-master\Templates\PY32F030xx_Templates\Src:
+		- main.c, py32f0xx_hal_msp.c, py32f0xx_it.c
+	- PY32F0xx_Firmware-master\Templates\PY32F030xx_Templates\Inc:
+		- main.h, py32f0xx_hal_conf.h, py32f0xx_it.h
+- Options for Target_1:
+	- Device - PY32F030x8
+	- Software Pack - Puya::PY32F0xx_DFP@1.2.8
+	- C/C++ tab - Defines: USE_HAL_DRIVER, PY32F030x8
+		- Include paths:
+			- .\Core\Inc
+			- C:\PY32F0xx_Firmware-master\Drivers\PY32F0xx_HAL_Driver\Inc
+	- Debug:
+		- J-LINK / J-TRACE Cortex
+			- SWD, 5MHz (lower if difficulty connecting to target)
 - Debug probes:
 	- Segger J-Link Plus + Segger J-Link Commander v9.78, J-Flash v9.78
 		- Closely integrated with Keil uVision (works reliably for programming and debug)
 		- VTRef voltage of target inaccessible on sealed unit:
 			- PY32f030EK28 runs directly from battery which varies from ~3.3-4.2
-			- Either connect an external 3.3V supply to VTRef or use J-Link Commander:
+			- Either connect an external 3.3V supply to VTRef or use J-Link Commander to set VTRef:
 				- Syntax - VTREF <Value[mV]>
 					- Set fixed value for VTref on J-Link (0 == Auto detection).
 					- Value[mV]	Value, VTref is supposed to be set to in millivolt.

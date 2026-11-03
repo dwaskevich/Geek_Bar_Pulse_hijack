@@ -1,0 +1,15 @@
+//https://kb.segger.com/J-Link_Commander
+//J-Link Commander command line command to execute Geek Bar connect/dump memory/erase/flash:
+//C:\"Program Files"\SEGGER\JLink_V978\jlink.exe -CommandFile C:\Keil_Projects\GeekBarPulse\j-link_connect_halt_erase_main_flash.jlink
+
+device py32f030x8
+if SWD
+speed 500
+connect
+halt
+//savebin C:\Keil_Projects\GeekBarPulse\geek_bar_pulse.bin 0x08000000 0x10000
+//erase 0x08000000, 0x0800ffff noreset
+mem32 0x08000000 40
+//loadfile C:\Keil_Projects\GeekBarPulse\Objects\GeekBarPulse.hex
+reset
+go

@@ -39,13 +39,18 @@ Description: Reverse engineering and repurposing of Geek Bar Pulse assets (MCU, 
 - Options for Target_1:
 	- Device - PY32F030x8
 	- Software Pack - Puya::PY32F0xx_DFP@1.2.8
-	- C/C++ tab - Defines: USE_HAL_DRIVER, PY32F030x8
+	- C/C++ tab:
+		- Defines: USE_HAL_DRIVER, PY32F030x8
+			- Device aliases defined in PY32F0xx_Firmware-master\Drivers\CMSIS\Device\PY32F0xx\Include\py32f0xx.h
+			- HAL defines in PY32F0xx_Firmware-master\Drivers\PY32F0xx_HAL_Driver\Inc\py32f0xx_hal_def.h
 		- Include paths:
 			- .\Core\Inc
 			- C:\PY32F0xx_Firmware-master\Drivers\PY32F0xx_HAL_Driver\Inc
 	- Debug:
 		- J-LINK / J-TRACE Cortex
 			- SWD, 5MHz (lower if difficulty connecting to target)
+			- Flash download tab:
+				- Check box "Reset and Run"
 - Debug probes:
 	- Segger J-Link Plus + Segger J-Link Commander v9.78, J-Flash v9.78
 		- Closely integrated with Keil uVision (works reliably for programming and debug)

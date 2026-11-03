@@ -133,6 +133,10 @@
 	*				-> handles TIM3 clock enable and alternate function gpio config
   *		- updated demo application to include PWM effects
   *		- updated readme.md
+  *
+  * Update 2-Nov-2026:
+  *		- implemented task scheduler
+  *		- created test tasks in ui.c
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -162,6 +166,8 @@
 #include "display.h"
 #include "leds.h"
 #include "battery.h"
+#include "scheduler.h"
+#include "ui.h"
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
@@ -254,11 +260,60 @@ int main(void)
 	
 #if DEBUG_DEVELOP
 	
+	/* testing scheduler */
+	static taskId_t heartbeat_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id;
+	scheduler_init();
+	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
+	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, fast, 0);
+	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
+	
+	display_decimal(display_top, heartbeat_task_id);
+	display_decimal(display_bottom, rotate_cycle_cw_task_id);
+	uint32_t start = HAL_GetTick(), now;
+	
+	while(1)
+	{
+		
+		scheduler_run_tasks();
+		now = HAL_GetTick();
+		
+		if(now - start > 5000 && now - start < 10000)
+		{
+			scheduler_reschedule_task(heartbeat_task_id, 250, 0);
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, medium, 0);
+		}		
+		else if(now - start > 10000 && now - start < 15000)
+		{
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, slow, 0);
+		}
+		else if(now - start > 15000 && now - start < 20000)
+		{
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, 0, 0);
+			scheduler_reschedule_task(rotate_cycle_ccw_task_id, slow, 0);
+			display_decimal(display_bottom, rotate_cycle_ccw_task_id);
+		}
+		else if(now - start > 20000 && now - start < 25000)
+		{
+			scheduler_reschedule_task(rotate_cycle_ccw_task_id, medium, 0);
+		}
+		else if(now - start > 25000 && now - start < 30000)
+		{
+			scheduler_reschedule_task(rotate_cycle_ccw_task_id, fast, 0);
+		}
+		else if(now - start > 30000 && now - start < 35000)
+		{
+			scheduler_reschedule_task(rotate_cycle_ccw_task_id, 0, 0);
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, fast, 0);
+			display_decimal(display_bottom, rotate_cycle_cw_task_id);
+			start = HAL_GetTick();
+		}
+	}
+	
 	/* Basic hex file */
 	while(1)
 	{
 		display_led_toggle(rocket);
-		HAL_Delay(1000);		
+		HAL_Delay(1000);
 	}
 	
 #endif

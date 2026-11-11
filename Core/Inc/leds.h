@@ -133,4 +133,6 @@ extern const LED_port_position_t LED_port_position[MAX_LEDS];
 extern const uint8_t led_group_array[NUM_GROUPS][8];
 extern const uint8_t seven_segment_displays[NUM_DISPLAYS][3];
 
+void leds_init(void);
+
 #endif

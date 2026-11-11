@@ -12,6 +12,12 @@
  */
 
 #include "leds.h"
+#include "main.h"
+
+/* Handle for the TIM16 Timer ... will be used for display muxing */
+TIM_HandleTypeDef		htim16 = {0};
+
+volatile uint32_t LED_display_buffer[7][2];
 
 const LED_port_position_t LED_port_position[MAX_LEDS] =
 {
@@ -115,3 +121,120 @@ const uint8_t seven_segment_displays[NUM_DISPLAYS][3] = {
 	{digit_top_right, digit_top_left, one_top},
 	{digit_bot_right,	digit_bot_left,	one_bot}
 };
+
+
+void leds_init(void)
+{
+	/* configure GPIO */
+	
+	/* enable GPIO port clock(s) */
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+	__HAL_RCC_GPIOB_CLK_ENABLE();
+	
+	/* declare an init structure */
+	GPIO_InitTypeDef GPIO_InitStruct = {0};	
+	
+	/* initialize GPIO Port A LED pins as outputs */
+	GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	
+		/* initialize GPIO Port B LED pins as outputs */
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+	
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+	
+	/* configure Timer 16 */
+	/*	djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz */
+
+	htim16.Instance               = TIM16;                            /* Select TIM16 */
+  htim16.Init.Period            = 1000 - 1;                         /* Auto-reload value */
+  htim16.Init.Prescaler         = 40 - 1;                           /* Prescaler of 40 - 1 */
+  htim16.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
+  htim16.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
+  htim16.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;   /* Auto-reload register not buffered */
+	
+  /* Initialize TIM16 */
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+	
+	/* Start the TIM16 Base generation in interrupt mode */
+  if (HAL_TIM_Base_Start_IT(&htim16) != HAL_OK)
+  {
+    APP_ErrorHandler();
+  }
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @param  htim:TIM handle
+  * @retval None
+	*
+	*	djjw ... LED display mux ISR (600Hz refresh rate)
+	*
+	*	copied from PUYA SDK example
+	*
+	*	Notes on HAL interrupt plumbing:
+	*		- hardware interrupt vector table is mapped in startup_py32f030x8.s
+	*		- handler must be placed in py32f0xx_it.c
+	*			-> reference example in puya's sdk TIMER1 TIM1_Update_IT example:
+	*				 PY32F0xx_Firmware-master\PY32F0xx_Firmware-master\Projects\PY32F030-STK\Example\TIMER1\TIM1_Update_IT\Src
+	*		- py32f0xx_hal_tim.c has a weak definition of the callback:
+	*			-> __weak void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+	*		- HAL_TIM_PeriodElapsedCallback definition here overrides weak definition
+	*
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{	
+	/* port masks use BSRR lower 16-bits (set mask) to drive cathodes inactive (high) */
+	#define PORTA_CATHODE_MASK	0x00000700
+	#define PORTB_CATHODE_MASK	0x00000017
+	
+	/* port masks use BSRR upper 16-bits (reset mask) to drive anodes inactive (low) */
+	#define PORTA_ANODE_MASK	0x98000000
+	#define PORTB_ANODE_MASK	0x01e80000
+	
+	(void) htim; /* suppress compiler warning (if more than one timer, use htim->Instance) */
+	static uint8_t cathode_counter = 0;
+	
+	/* Constant mapping of cathode activation masks (Upper 16-bits of BSRR for Reset) */
+	/* Structure: { GPIOA_ResetMask, GPIOB_ResetMask } */
+	static const uint32_t CATHODE_BITMASKS[NUM_LED_CATHODES][2] = {
+			{ 0x04000000, 0x00000000 }, // Case 0: TOP_LEDS (PA10)
+			{ 0x02000000, 0x00000000 }, // Case 1: BOT_LEDS (PA9)
+			{ 0x01000000, 0x00000000 }, // Case 2: LED_BOTRIGHT (PA8)
+			{ 0x00000000, 0x00100000 }, // Case 3: MID_LEDS (PB4)
+			{ 0x00000000, 0x00040000 }, // Case 4: LED_BOTLEFT (PB2)
+			{ 0x00000000, 0x00020000 }, // Case 5: LED_TOPRIGHT (PB1)
+			{ 0x00000000, 0x00010000 }  // Case 6: LED_TOPLEFT (PB0)
+	};
+	
+	/* turn off all cathodes to prevent ghosting while updating next anode group */
+	GPIOA->BSRR = PORTA_CATHODE_MASK;
+	GPIOB->BSRR = PORTB_CATHODE_MASK;
+	
+	/* clear previous anode values from GPIO ports */
+	GPIOA->BSRR = PORTA_ANODE_MASK;
+	GPIOB->BSRR = PORTB_ANODE_MASK;
+	
+	/* load GPIO Port A and B with anode values for next cathode in scan */
+	GPIOA->BSRR = LED_display_buffer[cathode_counter][0];
+	GPIOB->BSRR = LED_display_buffer[cathode_counter][1];
+	
+	/* activate current scan cathode */
+	GPIOA->BSRR = CATHODE_BITMASKS[cathode_counter][0];
+	GPIOB->BSRR = CATHODE_BITMASKS[cathode_counter][1];
+	
+	cathode_counter++;
+	if(cathode_counter >= NUM_LED_CATHODES)
+		cathode_counter = 0;
+}

@@ -137,6 +137,10 @@
   * Update 2-Nov-2026:
   *		- implemented task scheduler
   *		- created test tasks in ui.c
+  *
+  * Update 11-Nov-2026:
+  *		- restructured firmware architecture
+  *			-> added board-specific initializations (init functions moved to individual source files)
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -191,15 +195,8 @@
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
 TIM_HandleTypeDef htim3 = {0};
 
-/* Handle for the TIM16 Timer ... will be used for display muxing */
-TIM_HandleTypeDef		htim16 = {0};
-
-/* Handle for the ADC */
-ADC_HandleTypeDef hadc = {0};
-ADC_ChannelConfTypeDef sConfig = {0};
-
-/* LED display 7-anode array (note - anodes span GPIO Port A and B) */
-volatile uint32_t LED_display_buffer[7][2] = {0};
+/* Handle for the TIM16 Timer ... will be used to stop/re-start led mux timer for low power entry/exit */
+extern TIM_HandleTypeDef htim16;
 
 volatile _Bool  switch_event_pending = 0;   /* slide switch interrupt flag */
 volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
@@ -215,9 +212,7 @@ uint32_t inactivity_timestamp;
 /* Private function prototypes -----------------------------------------------*/
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
-static void TIM16_Init(void);
 static void TIM3_Init(void);
-static void ADC_Init(void);
 static void enter_low_power(_Bool gate);
 static void run_test_patterns(void);
 
@@ -226,7 +221,9 @@ static void run_test_patterns(void);
   * @retval int
   */
 int main(void)
-{	
+{
+	taskId_t heartbeat_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id;
+	
   /* Reset of all peripherals, Initializes the Systick. */
   HAL_Init();
   
@@ -235,23 +232,27 @@ int main(void)
 	
 	HAL_Delay(2000); /* safety time delay in case SWD port bricked by firmware ... remove later */
 	
+	/* initialize board-level features */
+	leds_init();
+	battery_init();
+	scheduler_init();
+//	slide_switch_init();
+	
 	/* djjw - initialize pins */
 	GPIO_Init();
-	
-	/* djjw - initialize TIM16 timer (LED mux) */
-	TIM16_Init();
 	
 	/* djjw - initialize TIM3 timer (RGB PWM) */
 	TIM3_Init();
 	
-	/* djjw - initialize ADC for ADC_CHANNEL_VREFINT measurement (to calculate battery voltage) */
-  ADC_Init();
+	/* register scheduler tasks */
+	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
+	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, fast, 0);
+	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
+	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, 0, 0);
+	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, 0);
+	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, 0);
 	
-	/* Start the TIM1 Base generation in interrupt mode */
-  if (HAL_TIM_Base_Start_IT(&htim16) != HAL_OK)
-  {
-    APP_ErrorHandler();
-  }
+	uint32_t counter = 0;
 
 #if !DEBUG_DEVELOP
 
@@ -320,8 +321,7 @@ int main(void)
 
   while(1)
 	{
-		uint32_t main_loop_time_marker = 0, last_processed_time = 0;
-		battery_status_t battery_status;
+		uint32_t last_processed_time = 0;
 		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
 		if(HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) == 0)
@@ -365,32 +365,20 @@ int main(void)
 		
 		run_test_patterns();
 		
-		display_led(lightning_bolt, 1);
+		scheduler_run_tasks();
 		
-		if(HAL_GetTick() - main_loop_time_marker > 1000)
-		{		
-			/* get battery status and update display */
-			battery_status = battery_get_status();
-			display_decimal(display_top, battery_status.percent);		
-			display_group_fill(arc_top, battery_status.bars);
-			display_led(bar_bot_right, 0);
-			display_led(bar_bot_left, 1);
-			display_decimal(display_bottom, battery_status.millivolts / 100);
-			HAL_Delay(1000);
-			display_led(bar_bot_left, 0);
-			display_led(bar_bot_right, 1);
-			if(battery_status.millivolts % 100 < 10)
-			{
-				display_seven_segment(digit_bot_left, 0);
-				display_seven_segment(digit_bot_right, battery_status.millivolts % 100);
-			}
-			else
-				display_decimal(display_bottom, battery_status.millivolts % 100);
-			HAL_Delay(500);
-			main_loop_time_marker = HAL_GetTick();
+		if(counter > 300000 && counter++ < 3*300000)
+		{
+			scheduler_suspend_task(rotate_cycle_cw_task_id);
+			scheduler_reschedule_task(rotate_cycle_alternate_task_id, medium, 0);
+		}		
+		if(counter++ > 3*300000)
+		{
+//			scheduler_suspend_all_tasks();
 		}
 		
-		if(HAL_GetTick() > inactivity_timestamp + 30000)
+		/* put system in low power if inactive for a period of time */
+		if(HAL_GetTick() > inactivity_timestamp + 60000)
 		{
 			enter_low_power(low_power_enable);
 			inactivity_timestamp = HAL_GetTick();
@@ -464,14 +452,6 @@ static void GPIO_Init(void)
 	/* declare an init structure */
 	GPIO_InitTypeDef GPIO_InitStruct = {0};	
 	
-	/* initialize GPIO Port A LED pins as outputs */
-	GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_15;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-	
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	
 	/* initialize GPIO Port A Slide Switch pin as both edge interrupt and enable NVIC */
 	GPIO_InitStruct.Pin = SLIDE_SWITCH_PIN;
 	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
@@ -483,14 +463,6 @@ static void GPIO_Init(void)
 	/* Enable EXTI interrupt and configure interrupt priority */
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
-	
-	/* initialize GPIO Port B LED pins as outputs */
-	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-	
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 	
 	/* initialize GPIO Port F charge pin as falling edge exti input */
 	GPIO_InitStruct.Pin = CHARGE_PIN;
@@ -510,33 +482,6 @@ static void GPIO_Init(void)
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	
 	HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
-}
-
-/**
-  * @brief  TIM16 Config
-  * @param  None
-  * @retval None
-	*
-	*	djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz
-	*
-	*	copied from PUYA SDK example
-	*
-  */
-static void TIM16_Init(void)
-{	
-	htim16.Instance               = TIM16;                            /* Select TIM16 */
-  htim16.Init.Period            = 1000 - 1;                         /* Auto-reload value */
-  htim16.Init.Prescaler         = 40 - 1;                           /* Prescaler of 40 - 1 */
-  htim16.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;           /* No clock division */
-  htim16.Init.CounterMode       = TIM_COUNTERMODE_UP;               /* Up counting */
-  htim16.Init.RepetitionCounter = 1 - 1;                            /* No repetition counting */
-  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;   /* Auto-reload register not buffered */
-	
-  /* Initialize TIM16 */
-  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
-  {
-    APP_ErrorHandler();
-  }
 }
 
 /**
@@ -590,123 +535,6 @@ static void TIM3_Init(void)
     APP_ErrorHandler();
   }
 	
-}
-
-/**
-  * @brief  ADC configuration function
-  * @param  None
-  * @retval None
-	*
-	*	djjw ... copied from PUYA SDK example
-	*
-  */
-static void ADC_Init(void)
-{
-  __HAL_RCC_ADC_FORCE_RESET();
-  __HAL_RCC_ADC_RELEASE_RESET();                                         /* Reset ADC */
-  __HAL_RCC_ADC_CLK_ENABLE();                                            /* Enable ADC clock */
-  
-  hadc.Instance = ADC1;
-
-  /* ADC calibration */
-  if (HAL_ADCEx_Calibration_Start(&hadc) != HAL_OK)                 
-  {
-    APP_ErrorHandler();
-  }
-  
-  hadc.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;              /* Set ADC clock */
-  hadc.Init.Resolution = ADC_RESOLUTION_12B;                        /* 12-bit resolution for converted data */
-  hadc.Init.DataAlign = ADC_DATAALIGN_RIGHT;                        /* Right-alignment for converted data */
-  hadc.Init.ScanConvMode = ADC_SCAN_DIRECTION_FORWARD;              /* Scan sequence direction: forward */
-  hadc.Init.EOCSelection = ADC_EOC_SINGLE_CONV;                     /* Single sampling */
-  hadc.Init.LowPowerAutoWait = ENABLE;                              /* Enable wait for conversion mode*/
-  hadc.Init.ContinuousConvMode = DISABLE;                           /* Single conversion mode */
-  hadc.Init.DiscontinuousConvMode = DISABLE;                        /* Disable discontinuous mode */
-  hadc.Init.ExternalTrigConv = ADC_SOFTWARE_START;                  /* Software triggering */
-  hadc.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;   /* No external trigger edge */
-  hadc.Init.DMAContinuousRequests = DISABLE;                        /* Disable DMA */
-  hadc.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;                     /* When an overload occurs, overwrite the previous value  */
-  hadc.Init.SamplingTimeCommon = ADC_SAMPLETIME_239CYCLES_5;        /* Set sampling time */
-
-  /* ADC initialization */
-  if (HAL_ADC_Init(&hadc) != HAL_OK)                                
-  {
-    APP_ErrorHandler();
-  }
-
-  sConfig.Channel = ADC_CHANNEL_VREFINT;                                 /* ADC channel selection */
-  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;                                /* Set the rank for the ADC channel order */
- 
-  /* Configure ADC channels */
-  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)            
-  {
-    APP_ErrorHandler();
-  }
-}
-
-/**
-  * @brief  Period elapsed callback in non blocking mode
-  * @param  htim:TIM handle
-  * @retval None
-	*
-	*	djjw ... LED display mux ISR (600Hz refresh rate)
-	*
-	*	copied from PUYA SDK example
-	*
-	*	Notes on HAL interrupt plumbing:
-	*		- hardware interrupt vector table is mapped in startup_py32f030x8.s
-	*		- handler must be placed in py32f0xx_it.c
-	*			-> reference example in puya's sdk TIMER1 TIM1_Update_IT example:
-	*				 PY32F0xx_Firmware-master\PY32F0xx_Firmware-master\Projects\PY32F030-STK\Example\TIMER1\TIM1_Update_IT\Src
-	*		- py32f0xx_hal_tim.c has a weak definition of the callback:
-	*			-> __weak void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-	*		- HAL_TIM_PeriodElapsedCallback definition here overrides weak definition
-	*
-  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{	
-	/* port masks use BSRR lower 16-bits (set mask) to drive cathodes inactive (high) */
-	#define PORTA_CATHODE_MASK	0x00000700
-	#define PORTB_CATHODE_MASK	0x00000017
-	
-	/* port masks use BSRR upper 16-bits (reset mask) to drive anodes inactive (low) */
-	#define PORTA_ANODE_MASK	0x98000000
-	#define PORTB_ANODE_MASK	0x01e80000
-	
-	(void) htim; /* suppress compiler warning (if more than one timer, use htim->Instance) */
-	static uint8_t cathode_counter = 0;
-	
-	/* Constant mapping of cathode activation masks (Upper 16-bits of BSRR for Reset) */
-	/* Structure: { GPIOA_ResetMask, GPIOB_ResetMask } */
-	static const uint32_t CATHODE_BITMASKS[NUM_LED_CATHODES][2] = {
-			{ 0x04000000, 0x00000000 }, // Case 0: TOP_LEDS (PA10)
-			{ 0x02000000, 0x00000000 }, // Case 1: BOT_LEDS (PA9)
-			{ 0x01000000, 0x00000000 }, // Case 2: LED_BOTRIGHT (PA8)
-			{ 0x00000000, 0x00100000 }, // Case 3: MID_LEDS (PB4)
-			{ 0x00000000, 0x00040000 }, // Case 4: LED_BOTLEFT (PB2)
-			{ 0x00000000, 0x00020000 }, // Case 5: LED_TOPRIGHT (PB1)
-			{ 0x00000000, 0x00010000 }  // Case 6: LED_TOPLEFT (PB0)
-	};
-	
-	/* turn off all cathodes to prevent ghosting while updating next anode group */
-	GPIOA->BSRR = PORTA_CATHODE_MASK;
-	GPIOB->BSRR = PORTB_CATHODE_MASK;
-	
-	/* clear previous anode values from GPIO ports */
-	GPIOA->BSRR = PORTA_ANODE_MASK;
-	GPIOB->BSRR = PORTB_ANODE_MASK;
-	
-	/* load GPIO Port A and B with anode values for next cathode in scan */
-	GPIOA->BSRR = LED_display_buffer[cathode_counter][0];
-	GPIOB->BSRR = LED_display_buffer[cathode_counter][1];
-	
-	/* activate current scan cathode */
-	GPIOA->BSRR = CATHODE_BITMASKS[cathode_counter][0];
-	GPIOB->BSRR = CATHODE_BITMASKS[cathode_counter][1];
-	
-	cathode_counter++;
-	if(cathode_counter >= NUM_LED_CATHODES)
-		cathode_counter = 0;
 }
 
 /**
@@ -814,7 +642,7 @@ void enter_low_power(_Bool gate)
 		
 		HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-		/* stop TIM1 timer and suspend SysTick */
+		/* stop TIM16 timer and suspend SysTick */
 		HAL_TIM_Base_Stop_IT(&htim16);
 		HAL_SuspendTick();
 		
@@ -992,7 +820,7 @@ static void run_test_patterns(void)
 		inactivity_timestamp = HAL_GetTick();
 	}
 
-	display_led(rocket, LED_ON);
+//	display_led(rocket, LED_ON);
 	
 	animation_cycle_count = 0;
 }

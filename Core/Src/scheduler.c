@@ -14,10 +14,10 @@
  #include "main.h"
  #include "scheduler.h"
  
- #define MAX_TASKS 8
+ #define MAX_TASKS 16
  
  typedef struct {
-    TaskCallback callback;
+    TaskCallback_t callback;
     uint32_t interval_ms;
     uint32_t last_run;
     uint8_t priority;
@@ -31,7 +31,7 @@ void scheduler_init()
 	task_count = 0;	
 }
 
-taskId_t scheduler_register_task(TaskCallback callback, uint32_t interval_ms, uint8_t priority)
+taskId_t scheduler_register_task(TaskCallback_t callback, uint32_t interval_ms, uint8_t priority)
 {
 	if(task_count < MAX_TASKS)
 	{
@@ -51,7 +51,7 @@ void scheduler_run_tasks(void)
 		if(0 != task_list[i].interval_ms && (now - task_list[i].last_run) >= task_list[i].interval_ms)
 		{
 			task_list[i].last_run = now;
-			task_list[i].callback();
+			task_list[i].callback(i);
 		}
 	}	
 }
@@ -65,4 +65,30 @@ void scheduler_reschedule_task(uint8_t task_id, uint32_t interval_ms, uint8_t pr
 	}	
 }
 
+void scheduler_run_once(uint8_t task_id)
+{
+	(void) task_id;
+	
+	
+}
+
+void scheduler_suspend_task(uint8_t task_id)
+{
+	if(task_id < task_count)
+	{
+		task_list[task_id].interval_ms = 0;
+		task_list[task_id].last_run = 0;
+		task_list[task_id].priority = 0;
+	}	
+}
+
+void scheduler_suspend_all_tasks(void)
+{
+	for(uint8_t i = 0; i < task_count; i++)
+	{
+		task_list[i].interval_ms = 0;
+		task_list[i].last_run = 0;
+		task_list[i].priority = 0;
+	}	
+}
 

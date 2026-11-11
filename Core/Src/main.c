@@ -169,6 +169,7 @@
 #include "gpio_defines.h"
 #include "display.h"
 #include "leds.h"
+#include "slide_switch.h"
 #include "battery.h"
 #include "scheduler.h"
 #include "ui.h"
@@ -195,7 +196,7 @@
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
 TIM_HandleTypeDef htim3 = {0};
 
-/* Handle for the TIM16 Timer ... will be used to stop/re-start led mux timer for low power entry/exit */
+/* extern handle for TIM16 Timer ... will be used to stop/re-start led mux timer for low power entry/exit */
 extern TIM_HandleTypeDef htim16;
 
 volatile _Bool  switch_event_pending = 0;   /* slide switch interrupt flag */
@@ -236,7 +237,7 @@ int main(void)
 	leds_init();
 	battery_init();
 	scheduler_init();
-//	slide_switch_init();
+	slide_switch_init();
 	
 	/* djjw - initialize pins */
 	GPIO_Init();
@@ -246,7 +247,8 @@ int main(void)
 	
 	/* register scheduler tasks */
 	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
-	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, fast, 0);
+	scheduler_register_task(slide_switch_process_events, 2, 0);
+	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, 0);
 	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
 	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, 0, 0);
 	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, 0);
@@ -261,55 +263,6 @@ int main(void)
 	
 #if DEBUG_DEVELOP
 	
-	/* testing scheduler */
-	static taskId_t heartbeat_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id;
-	scheduler_init();
-	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
-	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, fast, 0);
-	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
-	
-	display_decimal(display_top, heartbeat_task_id);
-	display_decimal(display_bottom, rotate_cycle_cw_task_id);
-	uint32_t start = HAL_GetTick(), now;
-	
-	while(1)
-	{
-		
-		scheduler_run_tasks();
-		now = HAL_GetTick();
-		
-		if(now - start > 5000 && now - start < 10000)
-		{
-			scheduler_reschedule_task(heartbeat_task_id, 250, 0);
-			scheduler_reschedule_task(rotate_cycle_cw_task_id, medium, 0);
-		}		
-		else if(now - start > 10000 && now - start < 15000)
-		{
-			scheduler_reschedule_task(rotate_cycle_cw_task_id, slow, 0);
-		}
-		else if(now - start > 15000 && now - start < 20000)
-		{
-			scheduler_reschedule_task(rotate_cycle_cw_task_id, 0, 0);
-			scheduler_reschedule_task(rotate_cycle_ccw_task_id, slow, 0);
-			display_decimal(display_bottom, rotate_cycle_ccw_task_id);
-		}
-		else if(now - start > 20000 && now - start < 25000)
-		{
-			scheduler_reschedule_task(rotate_cycle_ccw_task_id, medium, 0);
-		}
-		else if(now - start > 25000 && now - start < 30000)
-		{
-			scheduler_reschedule_task(rotate_cycle_ccw_task_id, fast, 0);
-		}
-		else if(now - start > 30000 && now - start < 35000)
-		{
-			scheduler_reschedule_task(rotate_cycle_ccw_task_id, 0, 0);
-			scheduler_reschedule_task(rotate_cycle_cw_task_id, fast, 0);
-			display_decimal(display_bottom, rotate_cycle_cw_task_id);
-			start = HAL_GetTick();
-		}
-	}
-	
 	/* Basic hex file */
 	while(1)
 	{
@@ -320,9 +273,7 @@ int main(void)
 #endif
 
   while(1)
-	{
-		uint32_t last_processed_time = 0;
-		
+	{		
 		/* read charging indicator ... disable low_power mode and illuninate green LEDs if charging is active */
 		if(HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN) == 0)
 		{
@@ -334,34 +285,8 @@ int main(void)
 			SET_GREEN_COMPARE(0);
 			HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
 		}
-		low_power_enable = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
-		/* --- Deferred Interrupt Processing Area --- */
-    if(switch_event_pending) 
-    {
-      switch_event_pending = 0; /* clear pending flag */
-      
-      /* check the timestamp captured by ISR */
-      if((switch_event_timestamp - last_processed_time) >= DEBOUNCE_LOCKOUT_MS)
-      {
-        /* debounce lockout window expired ... switch closure validated, reset last_processed_time */
-        last_processed_time = switch_event_timestamp;
-        
-        /* read slide switch pin */
-        if(HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN) == GPIO_PIN_RESET)
-        {
-          /* falling edge ... slide switch moved to "close", prepare for low-power stop */
-					enter_low_power(low_power_enable);
-					
-					animation_cycle_count = 1; /* reset run-mode animation loop count */
-        }
-        else /* rising edge - slide switch moved to "pulse" */
-        {
-					SET_GREEN_COMPARE(1023);
-					HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-        }
-      }			
-		}
+		low_power_enable = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
 		run_test_patterns();
 		
@@ -370,12 +295,12 @@ int main(void)
 		if(counter > 300000 && counter++ < 3*300000)
 		{
 			scheduler_suspend_task(rotate_cycle_cw_task_id);
-			scheduler_reschedule_task(rotate_cycle_alternate_task_id, medium, 0);
+			scheduler_reschedule_task(rotate_cycle_alternate_task_id, MEDIUM, 0);
 		}		
-		if(counter++ > 3*300000)
-		{
-//			scheduler_suspend_all_tasks();
-		}
+//		if(counter++ > 3*300000)
+//		{
+////			scheduler_suspend_all_tasks();
+//		}
 		
 		/* put system in low power if inactive for a period of time */
 		if(HAL_GetTick() > inactivity_timestamp + 60000)
@@ -452,18 +377,6 @@ static void GPIO_Init(void)
 	/* declare an init structure */
 	GPIO_InitTypeDef GPIO_InitStruct = {0};	
 	
-	/* initialize GPIO Port A Slide Switch pin as both edge interrupt and enable NVIC */
-	GPIO_InitStruct.Pin = SLIDE_SWITCH_PIN;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-	
-	HAL_GPIO_Init(SLIDE_SWITCH_PORT, &GPIO_InitStruct);
-	
-	/* Enable EXTI interrupt and configure interrupt priority */
-  HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
-  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
-	
 	/* initialize GPIO Port F charge pin as falling edge exti input */
 	GPIO_InitStruct.Pin = CHARGE_PIN;
 	GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
@@ -535,33 +448,6 @@ static void TIM3_Init(void)
     APP_ErrorHandler();
   }
 	
-}
-
-/**
-  * @brief  GPIO EXTI callback
-  * @param  GPIO_Pin
-  * @retval None
-	*
-	*	djjw ... GPIO wakeup sources
-	*				-->	slide switch interrupt captures timestamp and sets
-	*						flag (for main loop debounce)
-	*				-->	charge input interrupt wakes from sleep/stop and 
-	*						turns on the display
-	*
-  */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  if(GPIO_Pin == SLIDE_SWITCH_PIN)
-  {
-    /* Capture timestamp, set switch event flag ... debounce in main loop */
-    switch_event_timestamp = HAL_GetTick();
-    switch_event_pending = 1;
-	}
-	if(GPIO_Pin == CHARGE_PIN)
-  {
-    display_all(); /* TODO - replace with a scheduled task to animate the charging arc */
-									 /* Note - charging arc animation task should check charge input */
-	}
 }
 
 /**

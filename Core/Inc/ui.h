@@ -14,9 +14,9 @@
 
 typedef enum
 {
-	fast = 110,
-	medium = 220,
-	slow = 440
+	FAST = 110,
+	MEDIUM = 220,
+	SLOW = 440
 } rotate_cycle_speed_t;
 
 void heartbeat(taskId_t id);

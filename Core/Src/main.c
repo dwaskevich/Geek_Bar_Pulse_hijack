@@ -196,15 +196,12 @@
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
 TIM_HandleTypeDef htim3 = {0};
 
-/* extern handle for TIM16 Timer ... will be used to stop/re-start led mux timer for low power entry/exit */
+/* extern handle for TIM16 Timer in leds.c ... will be used to stop/re-start led mux timer for low power entry/exit */
 extern TIM_HandleTypeDef htim16;
-
-volatile _Bool  switch_event_pending = 0;   /* slide switch interrupt flag */
-volatile uint32_t switch_event_timestamp = 0; /* used for switch debounce */
 
 static int16_t animation_cycle_count = 1;
 
-_Bool low_power_enable = TRUE; /* global variable to authorize entering low power */
+_Bool low_power_enable_flag = TRUE; /* global variable to authorize entering low power */
 
 uint32_t inactivity_timestamp;
 
@@ -214,7 +211,7 @@ uint32_t inactivity_timestamp;
 static void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM3_Init(void);
-static void enter_low_power(_Bool gate);
+static void enter_low_power(_Bool enable);
 static void run_test_patterns(void);
 
 /**
@@ -236,16 +233,16 @@ int main(void)
 	/* initialize board-level features */
 	leds_init();
 	battery_init();
-	scheduler_init();
 	slide_switch_init();
+	scheduler_init();
 	
 	/* djjw - initialize pins */
 	GPIO_Init();
 	
-	/* djjw - initialize TIM3 timer (RGB PWM) */
+	/* djjw - initialize TIM3 (RGB PWM) timer */
 	TIM3_Init();
 	
-	/* register scheduler tasks */
+	/* register tasks (note - can be rescheduled or suspended in runtime using task_id) */
 	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
 	scheduler_register_task(slide_switch_process_events, 2, 0);
 	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, 0);
@@ -253,8 +250,6 @@ int main(void)
 	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, 0, 0);
 	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, 0);
 	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, 0);
-	
-	uint32_t counter = 0;
 
 #if !DEBUG_DEVELOP
 
@@ -286,27 +281,31 @@ int main(void)
 			HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
 		}
 		
-		low_power_enable = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
+		low_power_enable_flag = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
 		run_test_patterns();
 		
 		scheduler_run_tasks();
 		
-		if(counter > 300000 && counter++ < 3*300000)
+		/* testing rescheduling */
+		static uint32_t counter = 0;
+		static _Bool reschedule_flag = 1;
+		if(counter++ > 100000 && reschedule_flag)
 		{
 			scheduler_suspend_task(rotate_cycle_cw_task_id);
-			scheduler_reschedule_task(rotate_cycle_alternate_task_id, MEDIUM, 0);
-		}		
-//		if(counter++ > 3*300000)
-//		{
-////			scheduler_suspend_all_tasks();
-//		}
+			scheduler_reschedule_task(rotate_cycle_alternate_task_id, SLOW, 0);
+			reschedule_flag = 0;
+		}
 		
 		/* put system in low power if inactive for a period of time */
 		if(HAL_GetTick() > inactivity_timestamp + 60000)
 		{
-			enter_low_power(low_power_enable);
+			enter_low_power(low_power_enable_flag);
 			inactivity_timestamp = HAL_GetTick();
+			scheduler_suspend_task(rotate_cycle_alternate_task_id);
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, 0);
+			reschedule_flag = 1;
+			counter = 0;
 		}
 	}	
 }
@@ -370,8 +369,6 @@ static void APP_SystemClockConfig(void)
 static void GPIO_Init(void)
 {	
 	/* enable GPIO port clock(s) */
-	__HAL_RCC_GPIOA_CLK_ENABLE();
-	__HAL_RCC_GPIOB_CLK_ENABLE();
 	__HAL_RCC_GPIOF_CLK_ENABLE();
 	
 	/* declare an init structure */
@@ -471,7 +468,7 @@ void APP_ErrorHandler(void)
 	*	djjw ... prepares system for and enters low power stop.
 	*
   */
-void enter_low_power(_Bool gate)
+void enter_low_power(_Bool enable)
 {	
 	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
 	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
@@ -489,7 +486,7 @@ void enter_low_power(_Bool gate)
 	HAL_Delay(ANIMATION_DELAY);
 	SET_GREEN_COMPARE(0);
 		
-	if(TRUE == gate)
+	if(TRUE == enable)
 	{
 		display_all();
 		

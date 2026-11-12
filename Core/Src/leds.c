@@ -15,13 +15,13 @@
 #include "main.h"
 
 /* Handle for the TIM16 Timer ... will be used for display muxing */
-TIM_HandleTypeDef		htim16 = {0};
+TIM_HandleTypeDef htim16 = {0};
 
-volatile uint32_t LED_display_buffer[7][2];
+volatile uint32_t LED_display_buffer[7][2]; /* display buffer holds GPIOA and GPIOB data for 7 scan lines */
 
 const LED_port_position_t LED_port_position[MAX_LEDS] =
 {
-/*{scan, setPortA, setPortB 		note: rstPortA and rstPortB are just 16-bit left-shift} */
+/*{scan, setPortA, setPortB }		note: rstPortA and rstPortB are just 16-bit left-shifted setPortA/B values */
 	{0, 0x00000000, 0x00000100}, 	// 0  - arc_top_1,
 	{0, 0x00000000, 0x00000080}, 	// 1  - arc_top_2,
 	{0, 0x00000000, 0x00000040}, 	// 2  - arc_top_3,
@@ -142,7 +142,7 @@ void leds_init(void)
 	
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 	
-		/* initialize GPIO Port B LED pins as outputs */
+	/* initialize GPIO Port B LED pins as outputs */
 	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
@@ -151,7 +151,7 @@ void leds_init(void)
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 	
 	/* configure Timer 16 */
-	/*	djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz */
+	/* djjw ... LED display mux timer (600 Hz refresh) - 24MHz/40(prescaler) = 600,000, period of 1000 = 600Hz */
 
 	htim16.Instance               = TIM16;                            /* Select TIM16 */
   htim16.Init.Period            = 1000 - 1;                         /* Auto-reload value */
@@ -206,7 +206,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	(void) htim; /* suppress compiler warning (if more than one timer, use htim->Instance) */
 	static uint8_t cathode_counter = 0;
 	
-	/* Constant mapping of cathode activation masks (Upper 16-bits of BSRR for Reset) */
+	/* Constant mapping of cathode activation masks (upper 16-bits of BSRR for Reset) */
 	/* Structure: { GPIOA_ResetMask, GPIOB_ResetMask } */
 	static const uint32_t CATHODE_BITMASKS[NUM_LED_CATHODES][2] = {
 			{ 0x04000000, 0x00000000 }, // Case 0: TOP_LEDS (PA10)

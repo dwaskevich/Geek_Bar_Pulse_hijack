@@ -13,6 +13,7 @@
 
 #include "battery.h"
 #include "main.h"
+#include "adc.h"
 
 const uint16_t Battery_Percent_To_mV[101] = {
     3400, 3410, 3420, 3430, 3440, 3450, 3460, 3470, 3480, 3490, // 0% - 9%
@@ -28,70 +29,12 @@ const uint16_t Battery_Percent_To_mV[101] = {
     4150                                                        // 100%
 };
 
-/* Handle for the ADC */
-ADC_HandleTypeDef hadc = {0};
-ADC_ChannelConfTypeDef sConfig = {0};
-
-void battery_init(void)
-{
-	__HAL_RCC_ADC_FORCE_RESET();
-  __HAL_RCC_ADC_RELEASE_RESET();                                         /* Reset ADC */
-  __HAL_RCC_ADC_CLK_ENABLE();                                            /* Enable ADC clock */
-  
-  hadc.Instance = ADC1;
-
-  /* ADC calibration */
-  if (HAL_ADCEx_Calibration_Start(&hadc) != HAL_OK)                 
-  {
-    APP_ErrorHandler();
-  }
-  
-  hadc.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;              /* Set ADC clock */
-  hadc.Init.Resolution = ADC_RESOLUTION_12B;                        /* 12-bit resolution for converted data */
-  hadc.Init.DataAlign = ADC_DATAALIGN_RIGHT;                        /* Right-alignment for converted data */
-  hadc.Init.ScanConvMode = ADC_SCAN_DIRECTION_FORWARD;              /* Scan sequence direction: forward */
-  hadc.Init.EOCSelection = ADC_EOC_SINGLE_CONV;                     /* Single sampling */
-  hadc.Init.LowPowerAutoWait = ENABLE;                              /* Enable wait for conversion mode*/
-  hadc.Init.ContinuousConvMode = DISABLE;                           /* Single conversion mode */
-  hadc.Init.DiscontinuousConvMode = DISABLE;                        /* Disable discontinuous mode */
-  hadc.Init.ExternalTrigConv = ADC_SOFTWARE_START;                  /* Software triggering */
-  hadc.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;   /* No external trigger edge */
-  hadc.Init.DMAContinuousRequests = DISABLE;                        /* Disable DMA */
-  hadc.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;                     /* When an overload occurs, overwrite the previous value  */
-  hadc.Init.SamplingTimeCommon = ADC_SAMPLETIME_239CYCLES_5;        /* Set sampling time */
-
-  /* ADC initialization */
-  if (HAL_ADC_Init(&hadc) != HAL_OK)                                
-  {
-    APP_ErrorHandler();
-  }
-
-  sConfig.Channel = ADC_CHANNEL_VREFINT;                                 /* ADC channel selection */
-  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;                                /* Set the rank for the ADC channel order */
- 
-  /* Configure ADC channels */
-  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)            
-  {
-    APP_ErrorHandler();
-  }
-}
-
 uint16_t battery_measure_voltage(void)
 {
 	uint32_t adc_value;
 	uint16_t smooth_vrefint_sample = 0;
 	
-	/* Start ADC */
-	HAL_ADC_Start(&hadc);
-
-	/* wait for ADC conversion to complete */
-	HAL_ADC_PollForConversion(&hadc, 1000);
-
-	/* Get ADC value */
-	adc_value = HAL_ADC_GetValue(&hadc);
-	
-	HAL_ADC_Stop(&hadc);
-	
+	adc_value = adc_convert(ADC_CHANNEL_VREFINT);
 	smooth_vrefint_sample = battery_filter_ADC_value(adc_value);
 	
 	if(smooth_vrefint_sample > 0)
@@ -107,7 +50,7 @@ uint16_t battery_filter_ADC_value(uint16_t new_adc_raw)
 {
 	static uint32_t filtered_adc_accumulator = 0;
 	
-	/* seed the filter accumulator on your very first sample to avoid a slow ramp-up from 0 */
+	/* seed filter accumulator on first sample to avoid slow ramp-up from 0 */
 	if(filtered_adc_accumulator == 0)
 	{
 			filtered_adc_accumulator = (uint32_t)new_adc_raw << 4;

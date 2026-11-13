@@ -54,6 +54,7 @@ extern "C" {
 extern ADC_HandleTypeDef hadc;
 extern TIM_HandleTypeDef htim3;
 /* Exported functions prototypes ---------------------------------------------*/
+void APP_SystemClockConfig(void);
 void APP_ErrorHandler(void);
 
 #ifdef __cplusplus

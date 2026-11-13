@@ -17,6 +17,7 @@
 #include "leds.h"
 #include "battery.h"
 #include "gpio_defines.h"
+#include "adc.h"
 
 extern volatile _Bool slide_switch_event;
 battery_status_t battery_status;
@@ -29,40 +30,17 @@ void heartbeat(taskId_t id)
 
 void slide_switch_process_events(taskId_t id)
 {
-	static _Bool debounce_event_flag = 1;
-	static _Bool slide_switch_state;
+	(void) id;
+	uint32_t adc_value, adc_groupFill_value;
 	
-	if(!slide_switch_event) /* just return if no event */
-		return;
+	adc_value = adc_convert(ADC_CHANNEL_7);
 	
-	/* record current state of switch for debounce */
-	slide_switch_state = HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN);
-	
-	if(debounce_event_flag) /* if this is a start event, reschedule task for debounce time */
-	{
-		scheduler_reschedule_task(id, 20, 0);
-		debounce_event_flag = 0;
-		return;
-	}
-	else /* debounce window expired ... validate switch event */
-	{
-		if(slide_switch_state == HAL_GPIO_ReadPin(SLIDE_SWITCH_PORT, SLIDE_SWITCH_PIN))
-		{
-			if(0 == slide_switch_state) /* falling edge detected */
-			{
-				display_led(tear_drop, 1);
-				display_led(bar_top_left, 0);
-			}
-			else /* rising edge detected */
-			{
-				display_led(bar_top_left, 1);
-				display_led(tear_drop, 0);
-			}
-			scheduler_reschedule_task(id, 2, 0); /* re-que the task for quick response */
-		}
-		debounce_event_flag = 1; /* reset the debounce (i.e. start of event) flag */
-		slide_switch_event = 0; /* clear the volatile flag */
-	}
+	if(adc_value < 100)
+		adc_groupFill_value = 3; /* Pulse */
+	else if(adc_value > 2048)
+		adc_groupFill_value = 2; /* Normal */
+	else adc_groupFill_value = 1; /* Closed */
+	display_group_fill(arc_bottom, (uint8_t)adc_groupFill_value);
 }
 
 void rotate_cycle_cw(taskId_t id)

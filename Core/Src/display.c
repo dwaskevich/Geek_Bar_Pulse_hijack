@@ -8,6 +8,9 @@
  *
  *	Update 24-Sept-2026:
  *			- created file
+ *
+ *	Update 12-Nov-2026:
+ *			- fixed display_group_fill()
  *  
  */
 
@@ -111,25 +114,25 @@ void display_group_toggle(uint8_t group)
 }
 
 void display_group_fill(uint8_t group, uint8_t value)
-{
+{	
 	if(value > led_group_array[group][NUM_ELEMENTS])
 		value = led_group_array[group][NUM_ELEMENTS];
 	
-	for(uint8_t i = 0; i < value; i++)
+	for(uint8_t i = 0; i < led_group_array[group][NUM_ELEMENTS]; i++)
 	{
-		display_led(led_group_array[group][i + 1], 1);
+		display_led(led_group_array[group][i + 1], (i < value ? 1 : 0));
 	}
 }
 
 void display_seven_segment(uint8_t digit, uint8_t value)
 {
-	if(digit_top_left == digit | digit_top_right == digit | digit_bot_left == digit | digit_bot_right == digit)
+	if(digit_top_left == digit || digit_top_right == digit || digit_bot_left == digit || digit_bot_right == digit)
 	{
 		if(CLEAR_DISPLAY == value)
 			display_group(digit, 0);
 		else display_group(digit, SSD_LUT[value]);
 	}
-	else if(one_top == digit | one_bot == digit)
+	else if(one_top == digit || one_bot == digit)
 	{
 		if(CLEAR_DISPLAY == value)
 			display_group(digit, 0);
@@ -142,7 +145,7 @@ void display_seven_segment(uint8_t digit, uint8_t value)
 void display_decimal(uint8_t display, uint16_t value)
 {
 	uint16_t tempVal, i = 0;
-	if(display_top == display | display_bottom == display)
+	if(display_top == display || display_bottom == display)
 	{	
 		if(value > 199)
 				value = 199;
@@ -177,7 +180,7 @@ void display_decimal(uint8_t display, uint16_t value)
 void display_hex(uint8_t display, uint16_t value)
 {
 	uint16_t tempVal, i = 0;
-	if(display_top == display | display_bottom == display)
+	if(display_top == display || display_bottom == display)
 	{	
 		if(value > 0x1ff)
 				value = 0x1ff;
@@ -212,7 +215,7 @@ void display_hex(uint8_t display, uint16_t value)
 
 void display_clear_display(uint8_t display)
 {
-	if(display_top == display | display_bottom == display)
+	if(display_top == display || display_bottom == display)
 	{
 		display_seven_segment(seven_segment_displays[display][0], CLEAR_DISPLAY);
 		display_seven_segment(seven_segment_displays[display][1], CLEAR_DISPLAY);

@@ -444,6 +444,16 @@
               <FileType>1</FileType>
               <FilePath>.\Core\Src\slide_switch.c</FilePath>
             </File>
+            <File>
+              <FileName>adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\Src\adc.c</FilePath>
+            </File>
+            <File>
+              <FileName>low_power.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\Src\low_power.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -633,6 +643,16 @@
               <FileName>slide_switch.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Core\Inc\slide_switch.h</FilePath>
+            </File>
+            <File>
+              <FileName>adc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\adc.h</FilePath>
+            </File>
+            <File>
+              <FileName>low_power.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\Inc\low_power.h</FilePath>
             </File>
           </Files>
         </Group>

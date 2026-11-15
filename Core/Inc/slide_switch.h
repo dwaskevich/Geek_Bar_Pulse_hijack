@@ -16,8 +16,16 @@ typedef enum
 	CONFIG_INTERRUPT	
 }config_t;
 
+typedef enum
+{
+	CLOSED = 0,
+	NORMAL,
+	PULSE
+}slide_switch_position_t;
+
 void slide_switch_init(void);
 void slide_switch_config(config_t config_type);
+slide_switch_position_t slide_switch_get_position(void);
 void slide_switch_exti_callback(void);
 
 #endif

@@ -299,7 +299,7 @@ int main(void)
 		}
 		
 		/* put system in low power if inactive for a period of time */
-		if(HAL_GetTick() > inactivity_timestamp + 60000)
+		if(HAL_GetTick() > inactivity_timestamp + 20000)
 		{
 			enter_low_power(low_power_enable_flag);
 			

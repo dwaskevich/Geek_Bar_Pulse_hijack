@@ -68,7 +68,6 @@ uint16_t battery_filter_ADC_value(uint16_t new_adc_raw)
 	return (uint16_t)(filtered_adc_accumulator >> 4);	
 }
 
-
 battery_status_t battery_get_status(void)
 {
 	battery_status_t battery_status = {0};

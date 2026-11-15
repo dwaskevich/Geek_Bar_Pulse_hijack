@@ -14,6 +14,7 @@
 #include "main.h"
 #include "slide_switch.h"
 #include "gpio_defines.h"
+#include "adc.h"
 
 volatile _Bool slide_switch_event;
 
@@ -69,6 +70,18 @@ void slide_switch_config(config_t config_type)
 		HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
 	}
 	else return;	
+}
+
+slide_switch_position_t slide_switch_get_position(void)
+{
+	uint32_t adc_value;	
+	adc_value = adc_convert(ADC_CHANNEL_7);
+	
+	if(adc_value < 100)
+		return PULSE; /* Pulse */
+	else if(adc_value > 2048)
+		return NORMAL; /* Normal */
+	else return CLOSED; /* Closed */
 }
 
 void slide_switch_exti_callback(void)

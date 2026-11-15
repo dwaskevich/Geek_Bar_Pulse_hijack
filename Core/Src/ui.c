@@ -11,15 +11,12 @@
  *  
  */
 
-#include "main.h"
 #include "ui.h"
 #include "display.h"
 #include "leds.h"
 #include "battery.h"
-#include "gpio_defines.h"
-#include "adc.h"
+#include "slide_switch.h"
 
-extern volatile _Bool slide_switch_event;
 battery_status_t battery_status;
 
 void heartbeat(taskId_t id)
@@ -31,16 +28,7 @@ void heartbeat(taskId_t id)
 void slide_switch_process_events(taskId_t id)
 {
 	(void) id;
-	uint32_t adc_value, adc_groupFill_value;
-	
-	adc_value = adc_convert(ADC_CHANNEL_7);
-	
-	if(adc_value < 100)
-		adc_groupFill_value = 3; /* Pulse */
-	else if(adc_value > 2048)
-		adc_groupFill_value = 2; /* Normal */
-	else adc_groupFill_value = 1; /* Closed */
-	display_group_fill(arc_bottom, (uint8_t)adc_groupFill_value);
+	display_group_fill(arc_bottom, slide_switch_get_position() + 1);
 }
 
 void rotate_cycle_cw(taskId_t id)

@@ -18,9 +18,9 @@ typedef enum
 
 typedef enum
 {
-	CLOSED = 0,
-	NORMAL,
-	PULSE
+	SWITCH_CLOSED = 0,
+	SWITCH_NORMAL,
+	SWITCH_PULSE
 }slide_switch_position_t;
 
 void slide_switch_init(void);

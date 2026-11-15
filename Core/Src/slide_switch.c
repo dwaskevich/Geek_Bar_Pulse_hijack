@@ -78,10 +78,10 @@ slide_switch_position_t slide_switch_get_position(void)
 	adc_value = adc_convert(ADC_CHANNEL_7);
 	
 	if(adc_value < 100)
-		return PULSE; /* Pulse */
+		return SWITCH_PULSE; /* Pulse */
 	else if(adc_value > 2048)
-		return NORMAL; /* Normal */
-	else return CLOSED; /* Closed */
+		return SWITCH_NORMAL; /* Normal */
+	else return SWITCH_CLOSED; /* Closed */
 }
 
 void slide_switch_exti_callback(void)

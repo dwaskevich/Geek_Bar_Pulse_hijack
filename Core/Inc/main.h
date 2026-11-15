@@ -53,6 +53,7 @@ extern "C" {
 /* Exported variables prototypes ---------------------------------------------*/
 extern ADC_HandleTypeDef hadc;
 extern TIM_HandleTypeDef htim3;
+extern _Bool low_power_enable_flag;
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_SystemClockConfig(void);
 void APP_ErrorHandler(void);

@@ -16,6 +16,8 @@
 #include "leds.h"
 #include "battery.h"
 #include "slide_switch.h"
+#include "low_power.h"
+#include "scheduler.h"
 
 battery_status_t battery_status;
 
@@ -28,7 +30,24 @@ void heartbeat(taskId_t id)
 void slide_switch_process_events(taskId_t id)
 {
 	(void) id;
-	display_group_fill(arc_bottom, slide_switch_get_position() + 1);
+	slide_switch_position_t position = slide_switch_get_position();
+	display_group_fill(arc_bottom, position + 1);
+	switch (position)
+  {
+  	case SWITCH_CLOSED:
+			enter_low_power(low_power_enable_flag);
+			scheduler_resume_all_tasks();
+  		break;
+  	case SWITCH_NORMAL:
+			
+  		break;
+  	case SWITCH_PULSE:
+			
+  		break;
+		
+  	default:
+  		break;
+  }
 }
 
 void rotate_cycle_cw(taskId_t id)

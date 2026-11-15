@@ -21,6 +21,8 @@ void scheduler_run_tasks(void);
 void scheduler_reschedule_task(uint8_t task_id, uint32_t interval_ms, uint8_t priority);
 void scheduler_run_once(uint8_t task_id);
 void scheduler_suspend_task(uint8_t task_id);
+void scheduler_resume_task(uint8_t task_id);
 void scheduler_suspend_all_tasks(void);
+void scheduler_resume_all_tasks(void);
 
 #endif

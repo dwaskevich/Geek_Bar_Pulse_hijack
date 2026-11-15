@@ -247,9 +247,9 @@ int main(void)
 	
 	/* register tasks (note - can be rescheduled or suspended in runtime using task_id) */
 	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
-	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 5, 0);
+	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 20, 0);
 	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, 0);
-	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
+//	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
 	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, 0, 0);
 	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, 0);
 	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, 0);
@@ -285,7 +285,7 @@ int main(void)
 		}		
 		low_power_enable_flag = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
-		run_test_patterns();		
+//		run_test_patterns();
 		scheduler_run_tasks();
 		
 		/* testing rescheduling */
@@ -293,23 +293,21 @@ int main(void)
 		static _Bool reschedule_flag = 1;
 		if(counter++ > 100000 && reschedule_flag)
 		{
-			scheduler_suspend_task(rotate_cycle_cw_task_id);
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, 0, 0);
 			scheduler_reschedule_task(rotate_cycle_alternate_task_id, SLOW, 0);
 			reschedule_flag = 0;
 		}
 		
 		/* put system in low power if inactive for a period of time */
-		if(HAL_GetTick() > inactivity_timestamp + 20000)
+		if(HAL_GetTick() > inactivity_timestamp + 40000)
 		{
 			enter_low_power(low_power_enable_flag);
 			
 			/* restart after wake-up */
 			inactivity_timestamp = HAL_GetTick();
-			scheduler_reschedule_task(slide_switch_task_id, 5, 0);
-			scheduler_reschedule_task(heartbeat_task_id, 500, 0);
 			scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, 0);
-			scheduler_reschedule_task(battery_status_task_id, 1000, 0);
-			scheduler_reschedule_task(battery_voltage_task_id, 1250, 0);
+			scheduler_reschedule_task(rotate_cycle_alternate_task_id, 0, 0);
+			scheduler_resume_all_tasks();
 			animation_cycle_count = 1;
 			reschedule_flag = 1;
 			counter = 0;

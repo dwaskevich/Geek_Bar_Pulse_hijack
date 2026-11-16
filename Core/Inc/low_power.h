@@ -11,6 +11,6 @@
 #define __LOW_POWER_H
 
 
-void enter_low_power(_Bool enable);
+void enter_low_power(_Bool enable, _Bool fade_out);
 
 #endif

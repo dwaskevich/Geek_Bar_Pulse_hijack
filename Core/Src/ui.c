@@ -19,6 +19,9 @@
 #include "low_power.h"
 #include "scheduler.h"
 
+#define DEBOUNCE_TIME_MS	50
+
+extern volatile _Bool slide_switch_event;
 battery_status_t battery_status;
 
 void heartbeat(taskId_t id)
@@ -30,24 +33,43 @@ void heartbeat(taskId_t id)
 void slide_switch_process_events(taskId_t id)
 {
 	(void) id;
-	slide_switch_position_t position = slide_switch_get_position();
-	display_group_fill(arc_bottom, position + 1);
-	switch (position)
-  {
-  	case SWITCH_CLOSED:
-			enter_low_power(low_power_enable_flag);
-			scheduler_resume_all_tasks();
-  		break;
-  	case SWITCH_NORMAL:
-			
-  		break;
-  	case SWITCH_PULSE:
-			
-  		break;
-		
-  	default:
-  		break;
-  }
+	static _Bool debounce_event = 1;
+	static slide_switch_position_t position;
+	
+	if(debounce_event) /* if this is a start event, record position and reschedule task for debounce time */
+	{
+		position = slide_switch_get_position(); /* record current position of slide switch for debounce */
+		scheduler_reschedule_task(id, DEBOUNCE_TIME_MS, 0); /* reschedule task */
+		debounce_event = 0;
+		return;
+	}
+	else /* debounce window expired ... validate switch event */
+	{
+		if(position == slide_switch_get_position()) /* if true, position hasn't changed (position validated) */
+		{
+			switch (position)
+			{
+				case SWITCH_CLOSED:
+					display_group_fill(arc_bottom, SWITCH_CLOSED + 1);
+					enter_low_power(low_power_enable_flag, 1);
+					scheduler_resume_all_tasks();
+					break;
+				case SWITCH_NORMAL:
+					display_group_fill(arc_bottom, SWITCH_NORMAL + 1);
+					
+					break;
+				case SWITCH_PULSE:
+					display_group_fill(arc_bottom, SWITCH_PULSE + 1);
+					
+					break;
+				
+				default:
+					break;
+			}
+			scheduler_reschedule_task(id, 2, 0); /* re-que the task for quick response */
+		}
+		debounce_event = 1; /* reset the debounce (i.e. start-of-event) flag */
+	}
 }
 
 void rotate_cycle_cw(taskId_t id)

@@ -147,8 +147,25 @@
   *		- implemented ADC functions
   *		- implemented low power
   *		- updated slide switch:
-  *			-> configured for ADC Channel 7 for normal reads
-  *			-> reconfigured for interrupt wakeup source in low power
+  *			-> configure ADC Channel 7 for normal reads
+  *			-> reconfigure as interrupt wakeup source in low power
+  *
+  * Update 14-Nov-2026:
+  *		- updated slide switch:
+  *			-> added enum for switch positions
+	*			-> implemented slide_switch_get_position()
+	*		- cleaned up dependencies
+  *
+  * Update 15-Nov-2026:
+  *		- updated scheduler:
+  *			-> added suspend_task flag to task_t structure definition
+  *			-> updated scheduler functions to include suspend_task flag
+  *			-> added suspend and resume functions
+  *		- updated slide_switch_process_events() task in ui.c:
+  *			-> added debounce to switch positions
+  *			-> added switch statement to process debounced positions
+  *		- updated low_power.c:
+  *			-> slide switch can interrupt low-power shutdown
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -247,7 +264,7 @@ int main(void)
 	
 	/* register tasks (note - can be rescheduled or suspended in runtime using task_id) */
 	heartbeat_task_id = scheduler_register_task(heartbeat, 500, 0);
-	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 20, 0);
+	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 2, 0);
 	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, 0);
 //	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, 0);
 	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, 0, 0);
@@ -299,10 +316,9 @@ int main(void)
 		}
 		
 		/* put system in low power if inactive for a period of time */
-		if(HAL_GetTick() > inactivity_timestamp + 40000)
+		if(HAL_GetTick() > inactivity_timestamp + 20000)
 		{
-			enter_low_power(low_power_enable_flag);
-			
+			enter_low_power(low_power_enable_flag, 0);
 			/* restart after wake-up */
 			inactivity_timestamp = HAL_GetTick();
 			scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, 0);

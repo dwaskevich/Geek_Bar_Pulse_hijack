@@ -21,8 +21,8 @@
 
 #define DEBOUNCE_TIME_MS	50
 
-extern volatile _Bool slide_switch_event;
 battery_status_t battery_status;
+extern uint32_t inactivity_timestamp;
 
 void heartbeat(taskId_t id)
 {
@@ -39,7 +39,7 @@ void slide_switch_process_events(taskId_t id)
 	if(debounce_event) /* if this is a start event, record position and reschedule task for debounce time */
 	{
 		position = slide_switch_get_position(); /* record current position of slide switch for debounce */
-		scheduler_reschedule_task(id, DEBOUNCE_TIME_MS, 0); /* reschedule task */
+		scheduler_reschedule_task(id, DEBOUNCE_TIME_MS, DEFAULT_PRIORITY); /* reschedule task */
 		debounce_event = 0;
 		return;
 	}
@@ -47,6 +47,7 @@ void slide_switch_process_events(taskId_t id)
 	{
 		if(position == slide_switch_get_position()) /* if true, position hasn't changed (position validated) */
 		{
+			inactivity_timestamp = HAL_GetTick(); /* reset inactivity timeout */
 			switch (position)
 			{
 				case SWITCH_CLOSED:
@@ -66,7 +67,7 @@ void slide_switch_process_events(taskId_t id)
 				default:
 					break;
 			}
-			scheduler_reschedule_task(id, 2, 0); /* re-que the task for quick response */
+			scheduler_reschedule_task(id, 2, DEFAULT_PRIORITY); /* re-que the task for quick response */
 		}
 		debounce_event = 1; /* reset the debounce (i.e. start-of-event) flag */
 	}
@@ -115,7 +116,7 @@ void post_battery_voltage(taskId_t id)
 		display_led(bar_bot_left, 1);
 		display_decimal(display_bottom, battery_status.millivolts / 100);
 		most_significant = 0;
-		scheduler_reschedule_task(id, 750, 0);
+		scheduler_reschedule_task(id, 750, DEFAULT_PRIORITY);
 		return;
 	}
 	else
@@ -129,7 +130,7 @@ void post_battery_voltage(taskId_t id)
 		}
 		else
 			display_decimal(display_bottom, battery_status.millivolts % 100);
-		scheduler_reschedule_task(id, 1250, 0);
+		scheduler_reschedule_task(id, 1250, DEFAULT_PRIORITY);
 		most_significant = 1;
 	}
 	

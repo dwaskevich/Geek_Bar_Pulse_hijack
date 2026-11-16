@@ -11,6 +11,7 @@
  *  
  */
 
+#include <stdbool.h>
 #include "ui.h"
 #include "display.h"
 #include "leds.h"
@@ -33,16 +34,16 @@ void heartbeat(taskId_t id)
 void slide_switch_process_events(taskId_t id)
 {
 	(void) id;
-	static _Bool debounce_event = 1;
+	static bool debounce_event = true;
 	static slide_switch_position_t position, previous_position;
 	
-	if(previous_position != slide_switch_get_position()) /* only need to process if switch position has changed */
+	if(previous_position != slide_switch_get_position()) /* only process if switch position has changed */
 	{
-		if(debounce_event) /* if this is a start event, record position and reschedule task for debounce time */
+		if(true == debounce_event) /* if this is a start event, record position and reschedule task for debounce time */
 		{
 			position = slide_switch_get_position(); /* record current position of slide switch for debounce */
 			scheduler_reschedule_task(id, DEBOUNCE_TIME_MS, DEFAULT_PRIORITY); /* reschedule task */
-			debounce_event = 0;
+			debounce_event = false;
 			return;
 		}
 		else /* debounce window expired ... validate switch event */
@@ -55,7 +56,7 @@ void slide_switch_process_events(taskId_t id)
 				{
 					case SWITCH_CLOSED:
 						display_group_fill(arc_bottom, SWITCH_CLOSED + 1);
-						enter_low_power(low_power_enable_flag, 1);
+						enter_low_power(low_power_enable_flag, true);
 						scheduler_resume_all_tasks();
 						break;
 					case SWITCH_NORMAL:
@@ -72,7 +73,7 @@ void slide_switch_process_events(taskId_t id)
 				}
 				scheduler_reschedule_task(id, 2, DEFAULT_PRIORITY); /* re-que the task for quick response */
 			}
-			debounce_event = 1; /* reset the debounce (i.e. start-of-event) flag */
+			debounce_event = true; /* reset the debounce (i.e. start-of-event) flag */
 		}
 	}
 }
@@ -112,14 +113,14 @@ void post_battery_status(taskId_t id)
 void post_battery_voltage(taskId_t id)
 {
 	/* get battery voltage and update bottom display */
-	static _Bool most_significant = 1;
+	static bool most_significant = true;
 	
 	if(most_significant)
 	{
 		display_led(bar_bot_right, 0);
 		display_led(bar_bot_left, 1);
 		display_decimal(display_bottom, battery_status.millivolts / 100);
-		most_significant = 0;
+		most_significant = false;
 		scheduler_reschedule_task(id, 750, DEFAULT_PRIORITY);
 		return;
 	}
@@ -135,7 +136,7 @@ void post_battery_voltage(taskId_t id)
 		else
 			display_decimal(display_bottom, battery_status.millivolts % 100);
 		scheduler_reschedule_task(id, 1250, DEFAULT_PRIORITY);
-		most_significant = 1;
+		most_significant = true;
 	}
 	
 }

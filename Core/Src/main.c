@@ -223,7 +223,7 @@
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
 TIM_HandleTypeDef htim3 = {0};
 static int16_t animation_cycle_count = 1;
-_Bool low_power_enable_flag = TRUE; /* global variable to authorize entering low power */
+bool low_power_enable_flag = true; /* global variable to authorize entering low power */
 uint32_t inactivity_timestamp;
 
 /* Private user code ---------------------------------------------------------*/
@@ -265,8 +265,8 @@ int main(void)
 	heartbeat_task_id = scheduler_register_task(heartbeat, 500, DEFAULT_PRIORITY);
 	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 2, DEFAULT_PRIORITY);
 	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, DEFAULT_PRIORITY);
-//	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, 0, DEFAULT_PRIORITY);
-	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, 0, DEFAULT_PRIORITY);
+	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, TASK_DISABLED, DEFAULT_PRIORITY);
+	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, TASK_DISABLED, DEFAULT_PRIORITY);
 	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, DEFAULT_PRIORITY);
 	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, DEFAULT_PRIORITY);
 
@@ -308,26 +308,26 @@ int main(void)
 		
 		/* testing rescheduling */
 		static uint32_t counter = 0;
-		static _Bool reschedule_flag = 1;
-		if(counter++ > 100000 && reschedule_flag)
+		static _Bool reschedule_flag = true;
+		if(counter++ > 100000 && true == reschedule_flag)
 		{
-			scheduler_reschedule_task(rotate_cycle_cw_task_id, 0, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(rotate_cycle_cw_task_id, TASK_DISABLED, DEFAULT_PRIORITY);
 			scheduler_reschedule_task(rotate_cycle_alternate_task_id, SLOW, DEFAULT_PRIORITY);
-			reschedule_flag = 0;
+			reschedule_flag = false;
 		}
 		
 		/* put system in low power if inactive for a period of time */
 		if(HAL_GetTick() > inactivity_timestamp + INACTIVITY_TIMEOUT)
 		{
-			enter_low_power(low_power_enable_flag, 0); /* enter low power without fade-out (just shut down) */
+			enter_low_power(low_power_enable_flag, false); /* enter low power without fade-out (just shut down) */
 			
 			/* restart after wake-up */
 			inactivity_timestamp = HAL_GetTick();
 			scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, DEFAULT_PRIORITY);
-			scheduler_reschedule_task(rotate_cycle_alternate_task_id, 0, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(rotate_cycle_alternate_task_id, TASK_DISABLED, DEFAULT_PRIORITY);
 			scheduler_resume_all_tasks();
 			animation_cycle_count = 1;
-			reschedule_flag = 1;
+			reschedule_flag = true;
 			counter = 0;
 		}
 	}	

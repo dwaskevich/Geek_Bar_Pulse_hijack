@@ -38,6 +38,7 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdbool.h>
 #include "py32f0xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -53,7 +54,7 @@ extern "C" {
 /* Exported variables prototypes ---------------------------------------------*/
 extern ADC_HandleTypeDef hadc;
 extern TIM_HandleTypeDef htim3;
-extern _Bool low_power_enable_flag;
+extern bool low_power_enable_flag;
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_SystemClockConfig(void);
 void APP_ErrorHandler(void);

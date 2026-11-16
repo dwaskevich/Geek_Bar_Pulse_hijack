@@ -11,12 +11,13 @@
  *  
  */
 
+#include <stdbool.h>
 #include "main.h"
 #include "slide_switch.h"
 #include "gpio_defines.h"
 #include "adc.h"
 
-volatile _Bool slide_switch_event;
+volatile bool slide_switch_event;
 
 void slide_switch_init(void)
 {
@@ -87,5 +88,5 @@ slide_switch_position_t slide_switch_get_position(void)
 void slide_switch_exti_callback(void)
 {
 	/* still in interrupt context ... just set a flag and process in main loop with scheduler task */
-	slide_switch_event = TRUE;
+	slide_switch_event = true;
 }

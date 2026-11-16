@@ -11,6 +11,7 @@
  *  
  */
 
+#include <stdbool.h>
 #include "main.h"
 #include "low_power.h"
 #include "display.h"
@@ -30,15 +31,15 @@
 	*	Note ... all tasks are suspended, calling function must reschedule.
 	*
   */
-void enter_low_power(_Bool enable, _Bool fade_out)
+void enter_low_power(bool enable, bool fade_out)
 {	
 	/* UI animation */
 	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
 	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
 		
-	if(1 == enable)
+	if(true == enable)
 	{
-		if(1 == fade_out) /* slide switch "closed" fades-out, time-out just shuts down */
+		if(true == fade_out) /* slide switch "closed" fades-out, time-out just shuts down */
 		{
 			/* fill display then fade out */
 			display_all();

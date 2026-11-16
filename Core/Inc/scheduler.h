@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #define DEFAULT_PRIORITY	0
+#define TASK_DISABLED 0
 
 typedef uint8_t taskId_t;
 typedef void (*TaskCallback_t)(taskId_t id);

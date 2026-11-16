@@ -11,6 +11,7 @@
  *  
  */
  
+ #include <stdbool.h>
  #include "main.h"
  #include "scheduler.h"
  
@@ -18,8 +19,8 @@
  
  typedef struct {
     TaskCallback_t callback;
-		_Bool suspend_task_flag;
-    uint32_t interval_ms;
+		bool suspend_task_flag;
+    uint32_t interval_ms; /* value of 0 (TASK_DISABLED) prevents task from running (i.e. task is registered but not running) */
     uint32_t last_run;
     uint8_t priority;
 } task_t;
@@ -49,20 +50,20 @@ void scheduler_run_tasks(void)
 	
 	for (uint8_t i = 0; i < task_count; i++)
 	{
-		if(0 == task_list[i].suspend_task_flag && 0 != task_list[i].interval_ms && (now - task_list[i].last_run) >= task_list[i].interval_ms)
+		if(false == task_list[i].suspend_task_flag && TASK_DISABLED != task_list[i].interval_ms && (now - task_list[i].last_run) >= task_list[i].interval_ms)
 		{
-			task_list[i].last_run = now;
-			task_list[i].callback(i);
+			task_list[i].last_run = now; /* refresh last run time */
+			task_list[i].callback(i); /* dispatch callback */
 		}
-	}	
+	}
 }
 
 void scheduler_reschedule_task(uint8_t task_id, uint32_t interval_ms, uint8_t priority)
 {
-	(void) priority;
 	if(task_id < task_count)
 	{
 		task_list[task_id].interval_ms = interval_ms;
+		task_list[task_id].priority = priority;
 	}	
 }
 
@@ -77,7 +78,7 @@ void scheduler_suspend_task(uint8_t task_id)
 {
 	if(task_id < task_count)
 	{
-		task_list[task_id].suspend_task_flag = 1;
+		task_list[task_id].suspend_task_flag = true;
 	}	
 }
 
@@ -85,7 +86,7 @@ void scheduler_resume_task(uint8_t task_id)
 {
 	if(task_id < task_count)
 	{
-		task_list[task_id].suspend_task_flag = 0;
+		task_list[task_id].suspend_task_flag = false;
 		task_list[task_id].last_run = HAL_GetTick();
 	}	
 }
@@ -94,7 +95,7 @@ void scheduler_suspend_all_tasks(void)
 {
 	for(uint8_t i = 0; i < task_count; i++)
 	{
-		task_list[i].suspend_task_flag = 1;
+		task_list[i].suspend_task_flag = true;
 	}	
 }
 
@@ -103,7 +104,7 @@ void scheduler_resume_all_tasks(void)
 	uint32_t now = HAL_GetTick();
 	for(uint8_t i = 0; i < task_count; i++)
 	{
-		task_list[i].suspend_task_flag = 0;
+		task_list[i].suspend_task_flag = false;
 		task_list[i].last_run = now;
 	}	
 }

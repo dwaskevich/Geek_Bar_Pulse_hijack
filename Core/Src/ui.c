@@ -34,42 +34,46 @@ void slide_switch_process_events(taskId_t id)
 {
 	(void) id;
 	static _Bool debounce_event = 1;
-	static slide_switch_position_t position;
+	static slide_switch_position_t position, previous_position;
 	
-	if(debounce_event) /* if this is a start event, record position and reschedule task for debounce time */
+	if(previous_position != slide_switch_get_position()) /* only need to process if switch position has changed */
 	{
-		position = slide_switch_get_position(); /* record current position of slide switch for debounce */
-		scheduler_reschedule_task(id, DEBOUNCE_TIME_MS, DEFAULT_PRIORITY); /* reschedule task */
-		debounce_event = 0;
-		return;
-	}
-	else /* debounce window expired ... validate switch event */
-	{
-		if(position == slide_switch_get_position()) /* if true, position hasn't changed (position validated) */
+		if(debounce_event) /* if this is a start event, record position and reschedule task for debounce time */
 		{
-			inactivity_timestamp = HAL_GetTick(); /* reset inactivity timeout */
-			switch (position)
-			{
-				case SWITCH_CLOSED:
-					display_group_fill(arc_bottom, SWITCH_CLOSED + 1);
-					enter_low_power(low_power_enable_flag, 1);
-					scheduler_resume_all_tasks();
-					break;
-				case SWITCH_NORMAL:
-					display_group_fill(arc_bottom, SWITCH_NORMAL + 1);
-					
-					break;
-				case SWITCH_PULSE:
-					display_group_fill(arc_bottom, SWITCH_PULSE + 1);
-					
-					break;
-				
-				default:
-					break;
-			}
-			scheduler_reschedule_task(id, 2, DEFAULT_PRIORITY); /* re-que the task for quick response */
+			position = slide_switch_get_position(); /* record current position of slide switch for debounce */
+			scheduler_reschedule_task(id, DEBOUNCE_TIME_MS, DEFAULT_PRIORITY); /* reschedule task */
+			debounce_event = 0;
+			return;
 		}
-		debounce_event = 1; /* reset the debounce (i.e. start-of-event) flag */
+		else /* debounce window expired ... validate switch event */
+		{
+			if(position == slide_switch_get_position()) /* if true, position hasn't changed (position validated) */
+			{
+				inactivity_timestamp = HAL_GetTick(); /* reset inactivity timeout */
+				previous_position = position; /* remember current position */
+				switch (position)
+				{
+					case SWITCH_CLOSED:
+						display_group_fill(arc_bottom, SWITCH_CLOSED + 1);
+						enter_low_power(low_power_enable_flag, 1);
+						scheduler_resume_all_tasks();
+						break;
+					case SWITCH_NORMAL:
+						display_group_fill(arc_bottom, SWITCH_NORMAL + 1);
+						break;
+					case SWITCH_PULSE:
+						display_group_fill(arc_bottom, SWITCH_PULSE + 1);
+						run_test_patterns();
+						display_group_fill(arc_bottom, SWITCH_PULSE + 1);
+						break;
+					
+					default:
+						break;
+				}
+				scheduler_reschedule_task(id, 2, DEFAULT_PRIORITY); /* re-que the task for quick response */
+			}
+			debounce_event = 1; /* reset the debounce (i.e. start-of-event) flag */
+		}
 	}
 }
 

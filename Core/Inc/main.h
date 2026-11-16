@@ -57,6 +57,7 @@ extern _Bool low_power_enable_flag;
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_SystemClockConfig(void);
 void APP_ErrorHandler(void);
+void run_test_patterns(void);
 
 #ifdef __cplusplus
 }

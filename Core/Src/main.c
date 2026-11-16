@@ -232,7 +232,6 @@ uint32_t inactivity_timestamp;
 void APP_SystemClockConfig(void);
 static void GPIO_Init(void);
 static void TIM3_Init(void);
-static void run_test_patterns(void);
 
 /**
   * @brief  Main program.
@@ -286,6 +285,8 @@ int main(void)
 	}
 	
 #endif
+
+	run_test_patterns();
 	
   while(1)
 	{		
@@ -318,7 +319,8 @@ int main(void)
 		/* put system in low power if inactive for a period of time */
 		if(HAL_GetTick() > inactivity_timestamp + INACTIVITY_TIMEOUT)
 		{
-			enter_low_power(low_power_enable_flag, 0);
+			enter_low_power(low_power_enable_flag, 0); /* enter low power without fade-out (just shut down) */
+			
 			/* restart after wake-up */
 			inactivity_timestamp = HAL_GetTick();
 			scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, DEFAULT_PRIORITY);
@@ -481,7 +483,7 @@ void APP_ErrorHandler(void)
   }
 }
 
-static void run_test_patterns(void)
+void run_test_patterns(void)
 {
 	for(uint8_t i = 0; i < animation_cycle_count; i++)
 	{
@@ -608,7 +610,7 @@ static void run_test_patterns(void)
 
 //	display_led(rocket, LED_ON);
 	
-	animation_cycle_count = 0;
+//	animation_cycle_count = 0;
 }
 
 #ifdef  USE_FULL_ASSERT

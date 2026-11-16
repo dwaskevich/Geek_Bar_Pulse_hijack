@@ -33,34 +33,26 @@
 void enter_low_power(_Bool enable, _Bool fade_out)
 {	
 	/* UI animation */
-//	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
+	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
 	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-//	HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
-//	
-//	__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 1023);
-//	HAL_Delay(ANIMATION_DELAY);
-//	__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, 1023);
-//	HAL_Delay(ANIMATION_DELAY);
-//	__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 1023);
-//	HAL_Delay(ANIMATION_DELAY);
-//	__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 0);
-//	HAL_Delay(ANIMATION_DELAY);
-//	__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, 0);
-//	HAL_Delay(ANIMATION_DELAY);
-//	__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 0);
 		
 	if(1 == enable)
 	{
-		if(1 == fade_out)
+		if(1 == fade_out) /* slide switch "closed" fades-out, time-out just shuts down */
 		{
 			/* fill display then fade out */
 			display_all();
 			for(uint8_t i = slice_1; i <= slice_23; i++)
 			{
 				if(slide_switch_get_position() != SWITCH_CLOSED)
+				{
+					__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 0);
+					__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 0);
 					return;
+				}
 				display_group(i, 0);
 				__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 700 - (30 * (i - slice_1)));
+				__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 700 - (30 * (i - slice_1)));
 				HAL_Delay(100);			
 			}
 		}

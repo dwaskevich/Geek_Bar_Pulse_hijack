@@ -215,9 +215,9 @@
 
 #define DEBUG_DEVELOP				0
 
-#define SET_RED_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, x))
-#define SET_GREEN_COMPARE(x)  (__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, x))
-#define SET_BLUE_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, x))
+//#define SET_RED_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, x))
+//#define SET_GREEN_COMPARE(x)  (__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, x))
+//#define SET_BLUE_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, x))
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
@@ -225,6 +225,9 @@ TIM_HandleTypeDef htim3 = {0};
 static int16_t animation_cycle_count = 1;
 bool low_power_enable_flag = true; /* global variable to authorize entering low power */
 uint32_t inactivity_timestamp;
+
+taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, \
+	rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id, run_test_patterns_task_id;
 
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -239,7 +242,8 @@ static void TIM3_Init(void);
   */
 int main(void)
 {
-	taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id;
+//	taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, \
+//		rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id, run_test_patterns_task_id;
 	
   /* Reset of all peripherals, Initializes the Systick. */
   HAL_Init();
@@ -269,6 +273,7 @@ int main(void)
 	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, TASK_DISABLED, DEFAULT_PRIORITY);
 	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, DEFAULT_PRIORITY);
 	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, DEFAULT_PRIORITY);
+	run_test_patterns_task_id = scheduler_register_task(run_test_patterns, TASK_DISABLED, DEFAULT_PRIORITY);
 
 #if !DEBUG_DEVELOP
 
@@ -286,7 +291,7 @@ int main(void)
 	
 #endif
 
-	run_test_patterns();
+//	run_test_patterns();
 	
   while(1)
 	{		
@@ -483,135 +488,135 @@ void APP_ErrorHandler(void)
   }
 }
 
-void run_test_patterns(void)
-{
-	for(uint8_t i = 0; i < animation_cycle_count; i++)
-	{
-		/* animate peripheral RGB LEDs */
-		HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
-		HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-		HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
-		
-		SET_RED_COMPARE(1023);
-		HAL_Delay(ANIMATION_DELAY);
-		SET_BLUE_COMPARE(1023);
-		HAL_Delay(ANIMATION_DELAY);
-		SET_GREEN_COMPARE(1023);
-		HAL_Delay(ANIMATION_DELAY);
-		SET_RED_COMPARE(0);
-		HAL_Delay(ANIMATION_DELAY);
-		SET_BLUE_COMPARE(0);
-		HAL_Delay(ANIMATION_DELAY);
-		SET_GREEN_COMPARE(0);
-		HAL_Delay(ANIMATION_DELAY);
-		
-		/* testing led array ... */			
-		display_clear(); /* clear display */
-		
-		HAL_Delay(250);
-		
-		SET_RED_COMPARE(1023);
-		
-		/* illuminate each display elements and leave trail */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			display_led(i, LED_ON);
+//void run_test_patterns(void)
+//{
+//	for(uint8_t i = 0; i < animation_cycle_count; i++)
+//	{
+//		/* animate peripheral RGB LEDs */
+//		HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
+//		HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+//		HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
+//		
+//		SET_RED_COMPARE(1023);
+//		HAL_Delay(ANIMATION_DELAY);
+//		SET_BLUE_COMPARE(1023);
+//		HAL_Delay(ANIMATION_DELAY);
+//		SET_GREEN_COMPARE(1023);
+//		HAL_Delay(ANIMATION_DELAY);
+//		SET_RED_COMPARE(0);
+//		HAL_Delay(ANIMATION_DELAY);
+//		SET_BLUE_COMPARE(0);
+//		HAL_Delay(ANIMATION_DELAY);
+//		SET_GREEN_COMPARE(0);
+//		HAL_Delay(ANIMATION_DELAY);
+//		
+//		/* testing led array ... */			
+//		display_clear(); /* clear display */
+//		
+//		HAL_Delay(250);
+//		
+//		SET_RED_COMPARE(1023);
+//		
+//		/* illuminate each display elements and leave trail */
+//		for(uint8_t i = 0; i < MAX_LEDS; i++)
+//		{
+//			display_led(i, LED_ON);
 
-			HAL_Delay(PATTERN_DELAY);
-		}
-		
-		HAL_Delay(250);		
-		
-		/* pick up trail of display elements (in reverse order) */
-		for(uint8_t i = 0; i < MAX_LEDS; i++)
-		{
-			display_led(MAX_LEDS - 1 - i, LED_OFF);
-			
-			HAL_Delay(PATTERN_DELAY);
-		}
-		
-		SET_RED_COMPARE(0);
-		
-		/* flash display */
-		HAL_Delay(250);
-		SET_GREEN_COMPARE(1023);
-		HAL_Delay(250);
-		for(uint8_t i = 0; i < 3; i++)
-		{
-			display_all();
-			HAL_Delay(250);
-			display_clear();
-			HAL_Delay(250);
-		}
-		HAL_Delay(250);
-		
-		/* testing groups ... leave trail */
-		for(uint8_t i = one_top; i <= bar_bottom; i++)
-		{
-			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
-			{
-				display_led(led_group_array[i][j + 1], LED_ON);
-				
-				HAL_Delay(PATTERN_DELAY);
-			}
-			HAL_Delay(250);
-		}
-		
-		HAL_Delay(250);
-		
-		/* testing groups ... pick up trail (in reverse order) */
-		for(uint8_t i = one_top; i <= bar_bottom; i++)
-		{			
-			for(uint8_t j = 0; j < led_group_array[bar_bottom - i][0]; j++)
-			{
-				display_led(led_group_array[bar_bottom - i][led_group_array[bar_bottom - i][0] - 1 - j + 1], LED_OFF);
-				
-				HAL_Delay(PATTERN_DELAY);
-			}
-			HAL_Delay(250);
-		}
-		
-		HAL_Delay(250);
-		
-		/* testing groups with display_group() */
-		for(uint8_t i = one_top; i <= bar_bottom; i++)
-		{
-			display_group(i, 0xff);
-			HAL_Delay(GROUP_DELAY);
-		}
-		
-		HAL_Delay(250);
-		
-		/* testing groups with display_group() */
-		for(uint8_t i = one_top; i <= bar_bottom; i++)
-		{			
-			display_group(bar_bottom - i, 0x00);
-			HAL_Delay(GROUP_DELAY);
-		}
-		
-		HAL_Delay(250);
-		
-		SET_GREEN_COMPARE(0);
-		
-		for(uint8_t count = 0; count <= 199; count++)
-		{
-			SET_BLUE_COMPARE(count * 5);
-			display_decimal(display_top, count);
-			display_decimal(display_bottom, 199 - count);
-			HAL_Delay(100);
-		}
-		
-		SET_BLUE_COMPARE(1023);
-		
-		HAL_Delay(250);
-		
-		inactivity_timestamp = HAL_GetTick();
-	}
+//			HAL_Delay(PATTERN_DELAY);
+//		}
+//		
+//		HAL_Delay(250);		
+//		
+//		/* pick up trail of display elements (in reverse order) */
+//		for(uint8_t i = 0; i < MAX_LEDS; i++)
+//		{
+//			display_led(MAX_LEDS - 1 - i, LED_OFF);
+//			
+//			HAL_Delay(PATTERN_DELAY);
+//		}
+//		
+//		SET_RED_COMPARE(0);
+//		
+//		/* flash display */
+//		HAL_Delay(250);
+//		SET_GREEN_COMPARE(1023);
+//		HAL_Delay(250);
+//		for(uint8_t i = 0; i < 3; i++)
+//		{
+//			display_all();
+//			HAL_Delay(250);
+//			display_clear();
+//			HAL_Delay(250);
+//		}
+//		HAL_Delay(250);
+//		
+//		/* testing groups ... leave trail */
+//		for(uint8_t i = one_top; i <= bar_bottom; i++)
+//		{
+//			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
+//			{
+//				display_led(led_group_array[i][j + 1], LED_ON);
+//				
+//				HAL_Delay(PATTERN_DELAY);
+//			}
+//			HAL_Delay(250);
+//		}
+//		
+//		HAL_Delay(250);
+//		
+//		/* testing groups ... pick up trail (in reverse order) */
+//		for(uint8_t i = one_top; i <= bar_bottom; i++)
+//		{			
+//			for(uint8_t j = 0; j < led_group_array[bar_bottom - i][0]; j++)
+//			{
+//				display_led(led_group_array[bar_bottom - i][led_group_array[bar_bottom - i][0] - 1 - j + 1], LED_OFF);
+//				
+//				HAL_Delay(PATTERN_DELAY);
+//			}
+//			HAL_Delay(250);
+//		}
+//		
+//		HAL_Delay(250);
+//		
+//		/* testing groups with display_group() */
+//		for(uint8_t i = one_top; i <= bar_bottom; i++)
+//		{
+//			display_group(i, 0xff);
+//			HAL_Delay(GROUP_DELAY);
+//		}
+//		
+//		HAL_Delay(250);
+//		
+//		/* testing groups with display_group() */
+//		for(uint8_t i = one_top; i <= bar_bottom; i++)
+//		{			
+//			display_group(bar_bottom - i, 0x00);
+//			HAL_Delay(GROUP_DELAY);
+//		}
+//		
+//		HAL_Delay(250);
+//		
+//		SET_GREEN_COMPARE(0);
+//		
+//		for(uint8_t count = 0; count <= 199; count++)
+//		{
+//			SET_BLUE_COMPARE(count * 5);
+//			display_decimal(display_top, count);
+//			display_decimal(display_bottom, 199 - count);
+//			HAL_Delay(100);
+//		}
+//		
+//		SET_BLUE_COMPARE(1023);
+//		
+//		HAL_Delay(250);
+//		
+//		inactivity_timestamp = HAL_GetTick();
+//	}
 
-//	display_led(rocket, LED_ON);
-	
-//	animation_cycle_count = 0;
-}
+////	display_led(rocket, LED_ON);
+//	
+////	animation_cycle_count = 0;
+//}
 
 #ifdef  USE_FULL_ASSERT
 /**

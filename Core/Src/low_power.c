@@ -137,5 +137,6 @@ void enter_low_power(bool enable, bool fade_out)
 		
 		HAL_ResumeTick();
 		HAL_TIM_Base_Start_IT(&htim16);
+		scheduler_resume_all_tasks();
 	}
 }

@@ -12,6 +12,10 @@
 
 #include "scheduler.h"
 
+#define SET_RED_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, x))
+#define SET_GREEN_COMPARE(x)  (__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, x))
+#define SET_BLUE_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, x))
+
 typedef enum
 {
 	FAST = 110,
@@ -26,5 +30,6 @@ void rotate_cycle_ccw(taskId_t id);
 void rotate_cycle_alternate(taskId_t id);
 void post_battery_status(taskId_t id);
 void post_battery_voltage(taskId_t id);
+void run_test_patterns(taskId_t id);
 
 #endif

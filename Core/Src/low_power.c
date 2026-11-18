@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include "main.h"
 #include "low_power.h"
+#include "gpio_defines.h"
 #include "display.h"
 #include "leds.h"
 #include "slide_switch.h"

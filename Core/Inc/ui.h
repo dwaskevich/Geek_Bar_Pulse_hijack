@@ -35,4 +35,7 @@ void post_battery_status(taskId_t id);
 void post_battery_voltage(taskId_t id);
 void run_test_patterns(taskId_t id);
 
+
+void run_debug_test(taskId_t id);
+
 #endif

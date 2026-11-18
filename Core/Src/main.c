@@ -281,8 +281,8 @@ int main(void)
 		}
 		else
 		{
-			SET_GREEN_COMPARE(0);
-			HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
+//			SET_GREEN_COMPARE(0);
+//			HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
 		}
 		
 		/* monitor charging indicator */
@@ -403,7 +403,7 @@ static void GPIO_Init(void)
   * @param  None
   * @retval None
 	*
-	*	djjw ... PWM control for RGB LEDs (1kHz frequency, 10-bit resolution)
+	*	djjw ... PWM control for RGB LEDs (976 Hz frequency, 10-bit resolution)
 	*
 	*	copied from PUYA SDK example
 	*
@@ -413,8 +413,8 @@ static void TIM3_Init(void)
 	TIM_OC_InitTypeDef sConfig;
 	
 	htim3.Instance = TIM3;																					/* Select TIM3 */
-  htim3.Init.Period            = 1024 - 1;												/* Auto-reload value */
-  htim3.Init.Prescaler         = 24 - 1;													/* Prescaler of 800-1 */
+  htim3.Init.Period            = 1024 - 1;												/* Auto-reload value (976 Hz PWM freq) */
+  htim3.Init.Prescaler         = 24 - 1;													/* Prescaler of 24-1 (1MHz) */
   htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;					/* No clock division */
   htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;							/* Up counting */
   htim3.Init.RepetitionCounter = 1 - 1;														/* No repetition counting */

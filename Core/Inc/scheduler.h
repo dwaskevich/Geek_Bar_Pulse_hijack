@@ -19,14 +19,6 @@
 typedef uint8_t taskId_t;
 typedef void (*TaskCallback_t)(taskId_t id);
 
-typedef struct {
-	TaskCallback_t callback;
-	bool suspend_task_flag;
-	uint32_t interval_ms; /* value of 0 (TASK_DISABLED) prevents task from running (i.e. task is registered but not running) */
-	uint32_t last_run;
-	uint8_t priority;
-} task_t;
-
 void scheduler_init(void);
 taskId_t scheduler_register_task(TaskCallback_t callback, uint32_t interval_ms, uint8_t priority);
 void scheduler_run_tasks(void);

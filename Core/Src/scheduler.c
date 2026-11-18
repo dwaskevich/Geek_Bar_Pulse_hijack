@@ -11,23 +11,20 @@
  *  
  */
  
- #include <stdbool.h>
- #include "main.h"
- #include "scheduler.h"
- 
- #define MAX_TASKS 16
- 
-// typedef struct {
-//    TaskCallback_t callback;
-//		bool suspend_task_flag;
-//    uint32_t interval_ms; /* value of 0 (TASK_DISABLED) prevents task from running (i.e. task is registered but not running) */
-//    uint32_t last_run;
-//    uint8_t priority;
-//} task_t;
+#include <stdbool.h>
+#include "main.h"
+#include "scheduler.h"
 
-//extern taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, \
-//		rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id, run_test_patterns_task_id;
- 
+#define MAX_TASKS 16
+
+typedef struct {
+	TaskCallback_t callback;
+	bool suspend_task_flag;
+	uint32_t interval_ms; /* value of 0 (TASK_DISABLED) prevents task from running (i.e. task is registered but not running) */
+	uint32_t last_run;
+	uint8_t priority;
+} task_t;
+
 static task_t task_list[MAX_TASKS];
 static uint8_t task_count = 0;
 

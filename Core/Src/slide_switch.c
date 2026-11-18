@@ -31,7 +31,7 @@ void slide_switch_init(void)
 	
 	/* initialize GPIO Port A pin 7 as analog input for ADC */
 	GPIO_InitStruct.Pin = SLIDE_SWITCH_PIN;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	
@@ -87,6 +87,6 @@ slide_switch_position_t slide_switch_get_position(void)
 
 void slide_switch_exti_callback(void)
 {
-	/* still in interrupt context ... just set a flag and process in main loop with scheduler task */
+	/* still in interrupt context ... just set a flag */
 	slide_switch_event = true;
 }

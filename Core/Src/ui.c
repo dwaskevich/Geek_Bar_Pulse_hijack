@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include "main.h"
+#include "gpio_defines.h"
 #include "ui.h"
 #include "display.h"
 #include "leds.h"
@@ -33,8 +34,71 @@
 battery_status_t battery_status;
 extern uint32_t inactivity_timestamp;
 
-extern taskId_t run_test_patterns_task_id, heartbeat_task_id, battery_status_task_id, battery_voltage_task_id, \
-		rotate_cycle_cw_task_id, rotate_cycle_alternate_task_id;
+taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, \
+		rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id, run_test_patterns_task_id;
+
+uint8_t ui_init(void)
+{
+	uint8_t task_count = 0;
+	
+	heartbeat_task_id = scheduler_register_task(heartbeat, 500, DEFAULT_PRIORITY);
+	task_count++;
+	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 2, DEFAULT_PRIORITY);
+	task_count++;
+	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, DEFAULT_PRIORITY);
+	task_count++;
+	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, TASK_DISABLED, DEFAULT_PRIORITY);
+	task_count++;
+	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, TASK_DISABLED, DEFAULT_PRIORITY);
+	task_count++;
+	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, DEFAULT_PRIORITY);
+	task_count++;
+	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, DEFAULT_PRIORITY);
+	task_count++;
+	run_test_patterns_task_id = scheduler_register_task(run_test_patterns, TASK_DISABLED, DEFAULT_PRIORITY);
+	task_count++;
+	
+	return task_count;
+}
+
+void ui_wakeup(void)
+{
+	scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, DEFAULT_PRIORITY);
+	scheduler_reschedule_task(rotate_cycle_alternate_task_id, TASK_DISABLED, DEFAULT_PRIORITY);
+	scheduler_resume_all_tasks();
+}
+
+void ui_enter_low_power(bool enable, bool fade_out)
+{		
+	if(true == enable)
+	{
+		/* UI animation */
+		HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
+		HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
+		
+		if(true == fade_out) /* slide switch "closed" fades-out, time-out just shuts down */
+		{
+			/* fill display then fade out */
+			display_all();
+			for(uint8_t i = slice_1; i <= slice_23; i++)
+			{
+				if(slide_switch_get_position() != SWITCH_CLOSED)
+				{
+					__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 0);
+					__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 0);
+					return;
+				}
+				display_group(i, 0);
+				__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 700 - (30 * (i - slice_1)));
+				__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 700 - (30 * (i - slice_1)));
+				HAL_Delay(100);			
+			}
+		}
+		scheduler_suspend_all_tasks();
+		enter_low_power();
+		scheduler_resume_all_tasks();
+	}
+}
 
 void heartbeat(taskId_t id)
 {
@@ -68,17 +132,17 @@ void slide_switch_process_events(taskId_t id)
 					case SWITCH_CLOSED:
 						scheduler_reschedule_task(run_test_patterns_task_id, TASK_DISABLED, DEFAULT_PRIORITY);
 						display_group_fill(arc_bottom, SWITCH_CLOSED + 1);
-						enter_low_power(low_power_enable_flag, true);
-//						scheduler_resume_all_tasks();
+						ui_enter_low_power(low_power_enable_flag, true);
 						break;
 					case SWITCH_NORMAL:
-						scheduler_resume_all_tasks();
 						scheduler_reschedule_task(run_test_patterns_task_id, TASK_DISABLED, DEFAULT_PRIORITY);
+						scheduler_resume_all_tasks();
 						display_group_fill(arc_bottom, SWITCH_NORMAL + 1);
 						break;
 					case SWITCH_PULSE:
 						display_group_fill(arc_bottom, SWITCH_PULSE + 1);
-//						run_test_patterns();
+					
+						/* prepare for and run test patterns */
 						scheduler_suspend_task(heartbeat_task_id);
 						scheduler_suspend_task(rotate_cycle_cw_task_id);
 						scheduler_suspend_task(rotate_cycle_alternate_task_id);
@@ -91,7 +155,7 @@ void slide_switch_process_events(taskId_t id)
 					default:
 						break;
 				}
-				scheduler_reschedule_task(id, 2, DEFAULT_PRIORITY); /* re-que the task for quick response */
+				scheduler_reschedule_task(id, 2, DEFAULT_PRIORITY); /* re-que the task for quick response to next event */
 			}
 			debounce_event = true; /* reset the debounce (i.e. start-of-event) flag */
 		}
@@ -189,6 +253,7 @@ void run_test_patterns(taskId_t id)
   	case 0:
 			display_clear(); /* clear display */			
 			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			SET_GREEN_COMPARE(500);
 			sequence_id = 1;
   		break;
 		
@@ -201,7 +266,7 @@ void run_test_patterns(taskId_t id)
 				display_led(i, 1);
 				HAL_Delay(PATTERN_DELAY);
 			}
-			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(id, 3000, DEFAULT_PRIORITY);
 			sequence_id = 2;
   		break;
 		
@@ -213,15 +278,15 @@ void run_test_patterns(taskId_t id)
 				HAL_Delay(PATTERN_DELAY);
 			}
 			SET_RED_COMPARE(0);
-			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
 			sequence_id = 3;
   		break;
 		
 		/* change border color */
   	case 3:
-			SET_GREEN_COMPARE(1023);
+			SET_BLUE_COMPARE(1023);
 			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
-			sequence_id = 5;
+			sequence_id = 4;
   		break;
 		
 		/* flash display 3 times */
@@ -272,7 +337,7 @@ void run_test_patterns(taskId_t id)
 				}
 				HAL_Delay(250);
 			}
-			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
 			sequence_id = 11;
   		break;
 		
@@ -287,7 +352,7 @@ void run_test_patterns(taskId_t id)
 				}
 				HAL_Delay(250);
 			}
-			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
 			sequence_id = 12;
   		break;
 		
@@ -298,7 +363,7 @@ void run_test_patterns(taskId_t id)
 				display_group(i, 0xff);
 				HAL_Delay(GROUP_DELAY);
 			}
-			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
 			sequence_id = 13;
   		break;
 		
@@ -315,22 +380,22 @@ void run_test_patterns(taskId_t id)
 		
 		/* testing decimal 7-segment displays */
   	case 14:
-			SET_GREEN_COMPARE(0);
+			SET_BLUE_COMPARE(0);
 			for(uint8_t count = 0; count <= 199; count++)
 			{
-				SET_BLUE_COMPARE(count * 5);
+				SET_GREEN_COMPARE(count * 5);
 				display_decimal(display_top, count);
 				display_decimal(display_bottom, 199 - count);
 				HAL_Delay(GROUP_DELAY);
 			}
-			SET_BLUE_COMPARE(1023);
+			SET_GREEN_COMPARE(1023);
 			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
 			inactivity_timestamp = HAL_GetTick();
 			sequence_id = 15;
   		break;
 		
 		case 15:
-			SET_BLUE_COMPARE(0);
+			SET_GREEN_COMPARE(0);
 			display_clear();
 			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
 			sequence_id = 16;

@@ -40,7 +40,6 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include <stdbool.h>
 #include "py32f0xx_hal.h"
-#include "scheduler.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* Private defines -----------------------------------------------------------*/
@@ -52,8 +51,6 @@ extern "C" {
 #define BLUE_CHANNEL				TIM_CHANNEL_1
 #define GREEN_CHANNEL				TIM_CHANNEL_3
 
-//typedef uint8_t taskId_t;
-
 /* Exported variables prototypes ---------------------------------------------*/
 extern ADC_HandleTypeDef hadc;
 extern TIM_HandleTypeDef htim3;
@@ -61,7 +58,6 @@ extern bool low_power_enable_flag;
 /* Exported functions prototypes ---------------------------------------------*/
 void APP_SystemClockConfig(void);
 void APP_ErrorHandler(void);
-//void run_test_patterns(void);
 
 #ifdef __cplusplus
 }

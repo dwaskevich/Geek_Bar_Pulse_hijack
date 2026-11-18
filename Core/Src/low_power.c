@@ -16,49 +16,18 @@
 #include "low_power.h"
 #include "display.h"
 #include "leds.h"
-#include "scheduler.h"
 #include "slide_switch.h"
-
-#define ANIMATION_DELAY			(250)
 
 /**
   * @brief  Low power stop mode
-  * @param  _Bool value to enable or disable low-power mode
+  * @param  None
   * @retval None
 	*
 	*	djjw ... prepares system for and enters low power stop.
 	*
-	*	Note ... all tasks are suspended, calling function must reschedule.
-	*
   */
-void enter_low_power(bool enable, bool fade_out)
+void enter_low_power(void)
 {	
-	/* UI animation */
-	HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
-	HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-		
-	if(true == enable)
-	{
-		if(true == fade_out) /* slide switch "closed" fades-out, time-out just shuts down */
-		{
-			/* fill display then fade out */
-			display_all();
-			for(uint8_t i = slice_1; i <= slice_23; i++)
-			{
-				if(slide_switch_get_position() != SWITCH_CLOSED)
-				{
-					__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 0);
-					__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 0);
-					return;
-				}
-				display_group(i, 0);
-				__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, 700 - (30 * (i - slice_1)));
-				__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, 700 - (30 * (i - slice_1)));
-				HAL_Delay(100);			
-			}
-		}
-		
-		scheduler_suspend_all_tasks();
 		slide_switch_config(CONFIG_INTERRUPT); /* reconfigure slide switch input for wakeup interrupt */
 
 		HAL_TIM_PWM_Stop(&htim3, RED_CHANNEL);
@@ -137,6 +106,4 @@ void enter_low_power(bool enable, bool fade_out)
 		
 		HAL_ResumeTick();
 		HAL_TIM_Base_Start_IT(&htim16);
-		scheduler_resume_all_tasks();
-	}
 }

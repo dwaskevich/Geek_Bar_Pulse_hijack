@@ -23,6 +23,9 @@ typedef enum
 	SLOW = 440
 } rotate_cycle_speed_t;
 
+uint8_t ui_init(void);
+void ui_enter_low_power(bool enable, bool fade_out);
+void ui_wakeup(void);
 void heartbeat(taskId_t id);
 void slide_switch_process_events(taskId_t id);
 void rotate_cycle_cw(taskId_t id);

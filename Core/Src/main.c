@@ -198,36 +198,21 @@
 #include "battery.h"
 #include "scheduler.h"
 #include "ui.h"
-#include "low_power.h"
 #include "adc.h"
 
 /* Private define ------------------------------------------------------------*/
 /* djjw */
-
-#define LED_OFF							(0)
-#define LED_ON							(1)
-
-#define ANIMATION_DELAY			(250)
-#define PATTERN_DELAY				(50)
-#define GROUP_DELAY					(100)
-
 #define INACTIVITY_TIMEOUT	(20000)
-
 #define DEBUG_DEVELOP				0
-
-//#define SET_RED_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, RED_CHANNEL, x))
-//#define SET_GREEN_COMPARE(x)  (__HAL_TIM_SET_COMPARE(&htim3, GREEN_CHANNEL, x))
-//#define SET_BLUE_COMPARE(x)  	(__HAL_TIM_SET_COMPARE(&htim3, BLUE_CHANNEL, x))
 
 /* Private variables ---------------------------------------------------------*/
 /* Handle for the TIM3 Timer ... will be used for RGB LED PWM */
 TIM_HandleTypeDef htim3 = {0};
-static int16_t animation_cycle_count = 1;
+
 bool low_power_enable_flag = true; /* global variable to authorize entering low power */
 uint32_t inactivity_timestamp;
 
-taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, \
-	rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id, run_test_patterns_task_id;
+extern taskId_t rotate_cycle_cw_task_id, rotate_cycle_alternate_task_id;
 
 /* Private user code ---------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -242,8 +227,7 @@ static void TIM3_Init(void);
   */
 int main(void)
 {
-//	taskId_t heartbeat_task_id, slide_switch_task_id, rotate_cycle_cw_task_id, rotate_cycle_ccw_task_id, \
-//		rotate_cycle_alternate_task_id, battery_status_task_id, battery_voltage_task_id, run_test_patterns_task_id;
+	uint8_t number_tasks;
 	
   /* Reset of all peripherals, Initializes the Systick. */
   HAL_Init();
@@ -265,15 +249,11 @@ int main(void)
 	/* djjw - initialize TIM3 (RGB PWM) timer */
 	TIM3_Init();
 	
-	/* register tasks (note - can be rescheduled or suspended in runtime using task_id) */
-	heartbeat_task_id = scheduler_register_task(heartbeat, 500, DEFAULT_PRIORITY);
-	slide_switch_task_id = scheduler_register_task(slide_switch_process_events, 2, DEFAULT_PRIORITY);
-	rotate_cycle_cw_task_id = scheduler_register_task(rotate_cycle_cw, MEDIUM, DEFAULT_PRIORITY);
-	rotate_cycle_ccw_task_id = scheduler_register_task(rotate_cycle_ccw, TASK_DISABLED, DEFAULT_PRIORITY);
-	rotate_cycle_alternate_task_id = scheduler_register_task(rotate_cycle_alternate, TASK_DISABLED, DEFAULT_PRIORITY);
-	battery_status_task_id = scheduler_register_task(post_battery_status, 1000, DEFAULT_PRIORITY);
-	battery_voltage_task_id = scheduler_register_task(post_battery_voltage, 1250, DEFAULT_PRIORITY);
-	run_test_patterns_task_id = scheduler_register_task(run_test_patterns, TASK_DISABLED, DEFAULT_PRIORITY);
+	/* register tasks (note - can be rescheduled or suspended in ui.c using task_id) */
+	number_tasks = ui_init();
+	display_decimal(display_top, number_tasks);
+	HAL_Delay(1000);
+	display_clear();
 
 #if !DEBUG_DEVELOP
 
@@ -290,8 +270,6 @@ int main(void)
 	}
 	
 #endif
-
-//	run_test_patterns();
 	
   while(1)
 	{		
@@ -305,10 +283,11 @@ int main(void)
 		{
 			SET_GREEN_COMPARE(0);
 			HAL_TIM_PWM_Stop(&htim3, GREEN_CHANNEL);
-		}		
+		}
+		
+		/* monitor charging indicator */
 		low_power_enable_flag = HAL_GPIO_ReadPin(CHARGE_PORT, CHARGE_PIN);
 		
-//		run_test_patterns();
 		scheduler_run_tasks();
 		
 		/* testing rescheduling */
@@ -324,14 +303,11 @@ int main(void)
 		/* put system in low power if inactive for a period of time */
 		if(HAL_GetTick() > inactivity_timestamp + INACTIVITY_TIMEOUT)
 		{
-			enter_low_power(low_power_enable_flag, false); /* enter low power without fade-out (just shut down) */
+			ui_enter_low_power(low_power_enable_flag, false); /* enter low power without fade-out (just shut down) */
 			
 			/* restart after wake-up */
+			ui_wakeup();
 			inactivity_timestamp = HAL_GetTick();
-			scheduler_reschedule_task(rotate_cycle_cw_task_id, MEDIUM, DEFAULT_PRIORITY);
-			scheduler_reschedule_task(rotate_cycle_alternate_task_id, TASK_DISABLED, DEFAULT_PRIORITY);
-			scheduler_resume_all_tasks();
-			animation_cycle_count = 1;
 			reschedule_flag = true;
 			counter = 0;
 		}
@@ -487,136 +463,6 @@ void APP_ErrorHandler(void)
   {
   }
 }
-
-//void run_test_patterns(void)
-//{
-//	for(uint8_t i = 0; i < animation_cycle_count; i++)
-//	{
-//		/* animate peripheral RGB LEDs */
-//		HAL_TIM_PWM_Start(&htim3, RED_CHANNEL);
-//		HAL_TIM_PWM_Start(&htim3, GREEN_CHANNEL);
-//		HAL_TIM_PWM_Start(&htim3, BLUE_CHANNEL);
-//		
-//		SET_RED_COMPARE(1023);
-//		HAL_Delay(ANIMATION_DELAY);
-//		SET_BLUE_COMPARE(1023);
-//		HAL_Delay(ANIMATION_DELAY);
-//		SET_GREEN_COMPARE(1023);
-//		HAL_Delay(ANIMATION_DELAY);
-//		SET_RED_COMPARE(0);
-//		HAL_Delay(ANIMATION_DELAY);
-//		SET_BLUE_COMPARE(0);
-//		HAL_Delay(ANIMATION_DELAY);
-//		SET_GREEN_COMPARE(0);
-//		HAL_Delay(ANIMATION_DELAY);
-//		
-//		/* testing led array ... */			
-//		display_clear(); /* clear display */
-//		
-//		HAL_Delay(250);
-//		
-//		SET_RED_COMPARE(1023);
-//		
-//		/* illuminate each display elements and leave trail */
-//		for(uint8_t i = 0; i < MAX_LEDS; i++)
-//		{
-//			display_led(i, LED_ON);
-
-//			HAL_Delay(PATTERN_DELAY);
-//		}
-//		
-//		HAL_Delay(250);		
-//		
-//		/* pick up trail of display elements (in reverse order) */
-//		for(uint8_t i = 0; i < MAX_LEDS; i++)
-//		{
-//			display_led(MAX_LEDS - 1 - i, LED_OFF);
-//			
-//			HAL_Delay(PATTERN_DELAY);
-//		}
-//		
-//		SET_RED_COMPARE(0);
-//		
-//		/* flash display */
-//		HAL_Delay(250);
-//		SET_GREEN_COMPARE(1023);
-//		HAL_Delay(250);
-//		for(uint8_t i = 0; i < 3; i++)
-//		{
-//			display_all();
-//			HAL_Delay(250);
-//			display_clear();
-//			HAL_Delay(250);
-//		}
-//		HAL_Delay(250);
-//		
-//		/* testing groups ... leave trail */
-//		for(uint8_t i = one_top; i <= bar_bottom; i++)
-//		{
-//			for(uint8_t j = 0; j < led_group_array[i][0]; j++)
-//			{
-//				display_led(led_group_array[i][j + 1], LED_ON);
-//				
-//				HAL_Delay(PATTERN_DELAY);
-//			}
-//			HAL_Delay(250);
-//		}
-//		
-//		HAL_Delay(250);
-//		
-//		/* testing groups ... pick up trail (in reverse order) */
-//		for(uint8_t i = one_top; i <= bar_bottom; i++)
-//		{			
-//			for(uint8_t j = 0; j < led_group_array[bar_bottom - i][0]; j++)
-//			{
-//				display_led(led_group_array[bar_bottom - i][led_group_array[bar_bottom - i][0] - 1 - j + 1], LED_OFF);
-//				
-//				HAL_Delay(PATTERN_DELAY);
-//			}
-//			HAL_Delay(250);
-//		}
-//		
-//		HAL_Delay(250);
-//		
-//		/* testing groups with display_group() */
-//		for(uint8_t i = one_top; i <= bar_bottom; i++)
-//		{
-//			display_group(i, 0xff);
-//			HAL_Delay(GROUP_DELAY);
-//		}
-//		
-//		HAL_Delay(250);
-//		
-//		/* testing groups with display_group() */
-//		for(uint8_t i = one_top; i <= bar_bottom; i++)
-//		{			
-//			display_group(bar_bottom - i, 0x00);
-//			HAL_Delay(GROUP_DELAY);
-//		}
-//		
-//		HAL_Delay(250);
-//		
-//		SET_GREEN_COMPARE(0);
-//		
-//		for(uint8_t count = 0; count <= 199; count++)
-//		{
-//			SET_BLUE_COMPARE(count * 5);
-//			display_decimal(display_top, count);
-//			display_decimal(display_bottom, 199 - count);
-//			HAL_Delay(100);
-//		}
-//		
-//		SET_BLUE_COMPARE(1023);
-//		
-//		HAL_Delay(250);
-//		
-//		inactivity_timestamp = HAL_GetTick();
-//	}
-
-////	display_led(rocket, LED_ON);
-//	
-////	animation_cycle_count = 0;
-//}
 
 #ifdef  USE_FULL_ASSERT
 /**

@@ -166,6 +166,17 @@
   *			-> added switch statement to process debounced positions
   *		- updated low_power.c:
   *			-> slide switch can interrupt low-power shutdown
+  *
+  * Update 17-Nov-2026:
+  *		- moved ui operations out of main.c to ui.c
+  *			-> task id's now declared and contained in ui.c
+  *			-> new function added to intialize tasks (ui_init)
+  *		- updated low_power.c:
+  *			-> moved ui operations (e.g. animations) to ui.c
+  *			-> slide_switch can interrupt/cancel low-power shutdown during animations
+  *
+  * Update 20-Nov-2026:
+  *		- removed (most) HAL_DELAY() blocking from ui.c (run_test_patterns task)
 	*
   * <h2><center>&copy; Copyright (c) 2023 Puya Semiconductor Co.
   * All rights reserved.</center></h2>
@@ -212,6 +223,7 @@ TIM_HandleTypeDef htim3 = {0};
 bool low_power_enable_flag = true; /* global variable to authorize entering low power */
 uint32_t inactivity_timestamp;
 
+/* temporary extern just to test out task rescheduling */
 extern taskId_t rotate_cycle_cw_task_id, rotate_cycle_alternate_task_id;
 
 /* Private user code ---------------------------------------------------------*/
@@ -243,13 +255,13 @@ int main(void)
 	slide_switch_init();
 	scheduler_init();
 	
-	/* djjw - initialize pins */
+	/* djjw - initialize pins (note - RGB PWM pins configured in py32f0xx_hal_msp.c ... see Puya code example) */
 	GPIO_Init();
 	
 	/* djjw - initialize TIM3 (RGB PWM) timer */
 	TIM3_Init();
 	
-	/* register tasks (note - can be rescheduled or suspended in ui.c using task_id) */
+	/* register tasks (note - tasks can be rescheduled or suspended in ui.c using task_id) */
 	number_tasks = ui_init();
 	display_decimal(display_top, number_tasks);
 	HAL_Delay(1000);

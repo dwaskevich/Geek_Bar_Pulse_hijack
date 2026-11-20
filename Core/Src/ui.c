@@ -28,6 +28,8 @@
 #define GROUP_DELAY					(100)
 
 battery_status_t battery_status;
+
+/* extern needed to access inactivity timer in main.c */
 extern uint32_t inactivity_timestamp;
 
 /* declare task id's */
@@ -329,54 +331,58 @@ void run_test_patterns(taskId_t id)
 		
 		/* testing groups ... leave trail */
   	case 10:
-			for(uint8_t i = one_top; i <= bar_bottom; i++)
+			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			for(uint8_t j = 0; j < led_group_array[sub_sequence_id][0]; j++)
 			{
-				for(uint8_t j = 0; j < led_group_array[i][0]; j++)
-				{
-					display_led(led_group_array[i][j + 1], 1);
-					HAL_Delay(PATTERN_DELAY);
-				}
-				HAL_Delay(250);
+				display_led(led_group_array[sub_sequence_id][j + 1], 1);
+				HAL_Delay(PATTERN_DELAY);
 			}
-			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
-			sequence_id = 11;
+			if(sub_sequence_id++ >= bar_bottom)
+			{
+				scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
+				sub_sequence_id = 0;
+				sequence_id = 11;
+			}
   		break;
 		
 		/* testing groups ... pick up trail (in reverse order) */
   	case 11:
-			for(uint8_t i = one_top; i <= bar_bottom; i++)
-			{			
-				for(uint8_t j = 0; j < led_group_array[bar_bottom - i][0]; j++)
-				{
-					display_led(led_group_array[bar_bottom - i][led_group_array[bar_bottom - i][0] - 1 - j + 1], 0);
-					HAL_Delay(PATTERN_DELAY);
-				}
-				HAL_Delay(250);
+			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
+			for(uint8_t j = 0; j < led_group_array[bar_bottom - sub_sequence_id][0]; j++)
+			{
+				display_led(led_group_array[bar_bottom - sub_sequence_id][led_group_array[bar_bottom - sub_sequence_id][0] - 1 - j + 1], 0);
+				HAL_Delay(PATTERN_DELAY);
 			}
-			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
-			sequence_id = 12;
+			if(sub_sequence_id++ >= bar_bottom)
+			{
+				scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
+				sub_sequence_id = 0;
+				sequence_id = 12;
+			}
   		break;
 		
   	/* testing groups with display_group() */
   	case 12:
-			for(uint8_t i = one_top; i <= bar_bottom; i++)
+			scheduler_reschedule_task(id, GROUP_DELAY, DEFAULT_PRIORITY);
+			display_group(sub_sequence_id, 0xff);
+			if(sub_sequence_id++ >= bar_bottom)
 			{
-				display_group(i, 0xff);
-				HAL_Delay(GROUP_DELAY);
+				scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
+				sub_sequence_id = 0;
+				sequence_id = 13;
 			}
-			scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
-			sequence_id = 13;
   		break;
 		
   	/* testing groups with display_group() */
   	case 13:
-			for(uint8_t i = one_top; i <= bar_bottom; i++)
+			scheduler_reschedule_task(id, GROUP_DELAY, DEFAULT_PRIORITY);
+			display_group(sub_sequence_id, 0x00);
+			if(sub_sequence_id++ >= bar_bottom)
 			{
-				display_group(i, 0x00);
-				HAL_Delay(GROUP_DELAY);
+				scheduler_reschedule_task(id, 500, DEFAULT_PRIORITY);
+				sub_sequence_id = 0;
+				sequence_id = 14;
 			}
-			scheduler_reschedule_task(id, 250, DEFAULT_PRIORITY);
-			sequence_id = 14;
   		break;
 		
 		/* testing decimal 7-segment displays */
